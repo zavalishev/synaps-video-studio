@@ -9,7 +9,9 @@
 //            читает ручку из getInputProps()/props) → один подписанный лист: выбрать значение
 //            одной Read вместо цепочки «поправил число → still → посмотрел».
 import { spawnSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { STILL_STAMP } from "./_gate";
 import { budgetLine, bundleJob, COMPOSITION, ensureDir, glOpt, guardCollector, inJob, jobDir, num, parseArgs, parseProps, printGuard, quietBrowserTags, ROOT, str } from "./_lib";
 
 const a = parseArgs(process.argv.slice(2), ["probe", "sheet"]);
@@ -56,6 +58,9 @@ const main = async () => {
       }
     }
     printGuard(guard.save(join(outDir, "guard.json")));
+    // Отметка «кадры сняты» для ворот финала (_gate.ts): вариант после review засчитывается,
+    // в какую бы папку (--out) ни легли кадры.
+    writeFileSync(join(ensureDir(join(dir, "out")), STILL_STAMP), `${new Date().toISOString()} ${outDir}\n`);
     if (a.sheet || vKey) {
       const out = join(outDir, vKey ? `vary-${vKey}.png` : "sheet.png");
       const cols = vKey ? vList.length : Math.min(6, shots.length);

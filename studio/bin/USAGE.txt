@@ -88,6 +88,8 @@ studio <инструмент> [аргументы]      — запускать �
   studio new <slug> [--brief f|"текст"] [--width --height --fps] [--brand dir]
       папка ролика из шаблона без запуска директора.
 
-Запуск директора целиком: npx tsx studio/make.ts --brief brief.md [--slug s] [--size 1080x1920]
+Запуск директора целиком: npx tsx studio/make.ts --brief brief.md [--agent claude|codex] [--slug s] [--size 1080x1920]
   [--author "@handle"] [--brand dir] [--phases 2|1] [--budget-usd 4] [--budget-min 15] [--max-budget-usd 6]
-  [--model …] [--finish-model …] [--effort …] [--finish-effort …]
+  [--model …] [--finish-model …] [--effort …] [--finish-effort …] [--timeout-min 90] [--resume] [--dry-run]
+  --agent: Claude Code или Codex CLI (по умолчанию STUDIO_AGENT из .env, иначе установленный);
+  --budget-usd и --max-budget-usd — только у Claude Code (Codex цену не сообщает), потолок Codex — --timeout-min.

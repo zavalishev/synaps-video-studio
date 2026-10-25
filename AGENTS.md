@@ -10,9 +10,9 @@ Claude Code или Codex — по подписке пользователя. П�
 режиссёра.
 
 **Песочница Codex.** Рендер запускает браузер (Chrome Headless Shell), а в песочнице Codex он не
-стартует; озвучке и картинкам нужна сеть. Команды `npm run make`, `studio still`, `studio render`,
-`studio image`, `studio voice` запускай с выходом из песочницы (с разрешения пользователя) или
-в сессии `codex -s danger-full-access`.
+стартует; озвучке и картинкам нужна сеть. Всё, что рендерит или ходит к провайдеру — `npm run make`,
+`studio still`, `studio render`, `studio image`, `studio voice`, `self-review/review.ts`, — запускай
+с выходом из песочницы (с разрешения пользователя) или в сессии `codex -s danger-full-access`.
 
 Коротко:
 

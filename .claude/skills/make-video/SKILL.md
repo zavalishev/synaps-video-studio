@@ -13,8 +13,10 @@ description: Делает короткий вертикальный ролик (
 ролика, работай по `CLAUDE.md` (он же `AGENTS.md`) рядом.
 
 **Codex:** рендер студии запускает браузер (Chrome Headless Shell), а в песочнице Codex он не
-стартует. Команды `npm run make`, `studio still`, `studio render`, `studio image` запускай с
-выходом из песочницы (запроси разрешение у пользователя) или в сессии `codex -s danger-full-access`.
+стартует; озвучке и картинкам нужна сеть. Всё, что рендерит или ходит к провайдеру — `npm run make`,
+`studio still`, `studio render`, `studio image`, `studio voice`, `self-review/review.ts`, —
+запускай с выходом из песочницы (запроси разрешение у пользователя) или в сессии
+`codex -s danger-full-access`.
 
 ## 1. Готовность (≈ 10 с, бесплатно)
 
@@ -67,6 +69,9 @@ npm run -s make -- --agent <claude|codex> --brief jobs/<slug>.brief.md --slug <s
 ```
 
 Пока идёт — не опрашивай в цикле; при желании загляни в `tail -5 jobs/<slug>.progress.log`.
+В Codex сигнала о завершении нет: скажи пользователю, что ролик собирается в фоне 10–20 минут и
+что результат покажешь, когда он спросит «готово?»; тогда проверь `jobs/<slug>.result.json`
+(пустой — ещё идёт, смотри хвост progress.log).
 Когда закончится, прочитай `jobs/<slug>.result.json` и коротко ответь:
 
 - где файл (`final`; при `status: needs-stage-2` это `out/candidate.mp4` — ролик собран, но

@@ -152,6 +152,6 @@ spawnSync(join(ROOT, "studio/bin/studio"), ["doctor"], { cwd: ROOT, stdio: "inhe
 console.log(fatal
   ? "\nНе хватает обязательного (✗ выше) — поставьте и запустите npm run setup ещё раз."
   : `\nГотово. Дальше:
-  claude  или  codex                        # в этой папке: «сделай ролик про …» (скилл make-video)
+  claude  или  codex -s danger-full-access  # в этой папке: «сделай ролик про …» (скилл make-video; Codex — без песочницы: рендеру нужен браузер)
   npm run make -- --brief examples/briefs/01-coffee-promo.md   # или целиком без окна (--agent claude|codex)`);
 process.exit(fatal ? 1 : 0);

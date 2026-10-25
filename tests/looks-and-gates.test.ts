@@ -182,3 +182,21 @@ describe("без утечек: размеры и цвета — от ролик�
     }
   });
 });
+
+describe("ворота финала: вариант в любой папке", () => {
+  it("кадры studio still с --out вне out/stills засчитываются по отметке", async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync, utimesSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { finalGate, STILL_STAMP } = await import("../studio/bin/_gate");
+    const dir = mkdtempSync(join(tmpdir(), "gate-"));
+    mkdirSync(join(dir, "out", "review"), { recursive: true });
+    const rf = join(dir, "out", "review", "review.json");
+    writeFileSync(rf, JSON.stringify({ issues: [{ level: "WARN", kind: "flat-climax" }] }));
+    utimesSync(rf, new Date(1_000_000), new Date(1_000_000));
+    writeFileSync(join(dir, "notes.md"), "## Критик\nКритик #1: сделано — крупнее\n★ flat-climax: пробовал медленную маску → хуже, потому что поздно\n");
+    expect(finalGate(dir).ok).toBe(false); // варианта после review нет
+    writeFileSync(join(dir, "out", STILL_STAMP), "x"); // studio still --out out/variant
+    expect(finalGate(dir)).toMatchObject({ ok: true, accepted: ["flat-climax"] });
+  });
+});

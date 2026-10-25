@@ -136,7 +136,8 @@ a job folder and starts the director in one of two modes.
 
 - **Solo** (default). The director works headless in the background in two stages with a clean
   context each: build, then polish. You get the file, the concept in one line, time, cost and
-  the "questions for the client".
+  the "questions for the client". Codex doesn't notice on its own when the background run ends:
+  ask it "done?" in about 15 minutes.
 - **Together**. Say "let's do it together" or "show me concepts". The session itself becomes
   the director: it shows three directions to choose from, a contact sheet and the check
   results. This mode is also the handy way to revise a finished video.
@@ -316,7 +317,9 @@ brief → doctor (what's connected) → brief facts → three concepts → style
   director; the work so far stays in the job folder, and
   `npm run make -- --resume --slug <folder name>` continues it (with a fresh cap).
 - **Heads-up:** if `ANTHROPIC_API_KEY` is set in your environment, Claude Code bills the API
-  account instead of your subscription. The launcher warns about it.
+  account instead of your subscription. Same with Codex when it's signed in with an API key or
+  `CODEX_API_KEY` is set: the OpenAI API account pays, not your ChatGPT plan. The launcher warns
+  about it.
 - **Voice and images** are billed to your own keys at the providers' prices. A typical video
   uses up to 12 images and a few lines of narration, and repeats are free thanks to the cache.
   `command` and `none` cost nothing; with `IMAGE_PROVIDER=codex` images count against your
