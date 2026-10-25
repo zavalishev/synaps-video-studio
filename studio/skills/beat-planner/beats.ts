@@ -67,7 +67,7 @@ const insideKeep = (ws: Word[], i: number, keep: string[][]): boolean => keep.so
 });
 
 const suggest = () => {
-  if (!words) die("нет public/words.json — сначала studio voice");
+  if (!words) die("нет public/words.json — сначала studio voice (озвучки нет — beats.json пишется вручную по долям музыки, check работает без words.json)");
   const ws = words!.words;
   const pace = str(a, "pace", "mixed")!;
   const base = PACE[pace === "mixed" ? "explain" : pace] ?? PACE.explain;

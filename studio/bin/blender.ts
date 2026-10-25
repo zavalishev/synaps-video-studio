@@ -9,6 +9,7 @@ import { spawn } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { die, ensureDir, inJob, jobDir, LIB, num, parseArgs, str } from "./_lib";
+import { blenderBin } from "./_tools";
 
 const a = parseArgs();
 const dir = jobDir(a);
@@ -18,7 +19,7 @@ const out = inJob(dir, str(a, "out", "public/3d/render.png")!);
 ensureDir(dirname(out));
 const timeoutSec = num(a, "timeout", 600)!;
 // Blender: $BLENDER, иначе первый найденный (Homebrew, приложение macOS, Linux), иначе из PATH.
-const BLENDER = process.env.BLENDER ?? ["/opt/homebrew/bin/blender", "/usr/local/bin/blender", "/Applications/Blender.app/Contents/MacOS/Blender", "/usr/bin/blender", "/snap/bin/blender"].find((p) => existsSync(p)) ?? "blender";
+const BLENDER = blenderBin() ?? die("Blender не найден: поставьте его (blender.org, brew install --cask blender) или задайте BLENDER в .env; без него 3D — в кадре (@studio/three)");
 const pre = `import sys; sys.path.insert(0, ${JSON.stringify(join(LIB, "blender"))})`;
 const extra = (a["--"] as string[] | undefined) ?? [];
 const argv = ["-b", "--factory-startup", "-noaudio", "--python-exit-code", "1", "--python-expr", pre, "--python", script, "--", "--out", out, ...extra];

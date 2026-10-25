@@ -1,21 +1,29 @@
 studio <инструмент> [аргументы]      — запускать из папки ролика jobs/<slug> (или --job <dir>)
 Пути аргументов — от папки ролика. Файлы для кадра лежат в public/ и берутся staticFile("…").
 
-  studio voice lines.json [--voice onyx] [--style "указания диктору"] [--pace 1.0] [--gap 0.25]
-               [--head 0.3] [--lang ru] [--model gpt-4o-mini-tts] [--out voice.wav] [--keep-duration] [--estimate]
+  studio doctor [--json]
+      что подключено (бесплатно, без сети): провайдеры озвучки/картинок/таймингов из .env и что они
+      умеют, ffmpeg, Blender, whisper.cpp, claude; что директор может и не может. Запускать первым.
+
+  studio voice lines.json [--voice <голос>] [--style "указания диктору"] [--pace 1.0] [--gap 0.25]
+               [--head 0.3] [--lang ru] [--out voice.wav] [--keep-duration] [--estimate]
       --estimate — бесплатно, без озвучки: оценка длины по тексту (±10 %) — до платного прогона.
       реплики → public/voice.wav (48 кГц моно) + public/words.json (слова с таймингами, секунды;
       captions[] для @remotion/captions). lines.json: ["…","…"] или
       {"voice","style","pace","gap","lines":["…",{"id","say","pace","before","after","style","voice"}]}.
-      Платно (TTS через подключённого провайдера), кэш .cache/tts. job.json переключается на длину от аудио.
-      Голоса gpt-4o-mini-tts: alloy ash ballad coral echo fable onyx nova sage shimmer verse.
+      Провайдер — VOICE_PROVIDER в .env (openai | elevenlabs | command | none); платно, кэш .cache/tts.
+      Голос по умолчанию — из .env (OpenAI: alloy ash ballad coral echo fable nova onyx sage shimmer
+      verse; ElevenLabs: Voice ID, в том числе свой клон). --style — только где doctor пишет «работает».
+      Тайминги слов: из ответа озвучки → whisper.cpp → OpenAI transcription → пропорция (words.json
+      поле timing). none — озвучки нет: ролик без речи. job.json переключается на длину от аудио.
 
   studio image "промпт" [--out img/x.png] [--size 1024x1024|1024x1536|1536x1024|auto]
                [--quality low|medium|high] [--bg transparent|opaque|auto] [--prompt-file f] [--force]
                [--ref img/sheet.png[,img/b.png]]
-      картинка через подключённого провайдера → public/<out>, манифест public/images.json. Платно, кэш.
+      картинка через IMAGE_PROVIDER из .env (openai | gemini | command | none) → public/<out>,
+      манифест public/images.json. Платно, кэш. Без прозрачности у провайдера — белый фон и ВНИМАНИЕ.
       --ref — референсы (лист персонажа, образец стиля): тот же герой в новой позе/сцене.
-      ~50 с на картинку (low). Реальный размер может отличаться от --size (печатается);
+      ~10–60 с на картинку. Реальный размер может отличаться от --size (печатается);
       не та ориентация — один автоповтор с явной композицией (--no-retry — без него).
 
   studio blender script.py [--out public/3d/x.png] [--timeout 600] [-- --width 1080 --height 1920
@@ -50,7 +58,7 @@ studio <инструмент> [аргументы]      — запускать �
       каталог звуков (CC0); --copy кладёт в public/sfx/ ролика.
 
   studio music [настроение] [--bpm 90-110] [--energy 3-5] | studio music --copy id
-      каталог лицензированной музыки владельца (public/music/catalog.json). Пуст — музыка
+      каталог лицензированной музыки студии (public/music/catalog.json, CC0). Пуст — музыка
       открытым вопросом в notes.md; атмосфера места — bed.ts (sound-design).
 
   studio api <модуль> [имя]

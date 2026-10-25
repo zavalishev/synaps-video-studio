@@ -37,11 +37,12 @@ import { clientQuestions } from "./skills/claims-and-compliance/facts";
 import { join } from "node:path";
 import { createJob, JOBS, linkSkills, slugify } from "./bin/_job";
 import { die, num, parseArgs, ROOT, STUDIO, str } from "./bin/_lib";
+import { DOTENV_KEYS, ENV_FILE } from "./bin/_env";
+import { imageConfig, voiceConfig } from "./bin/_providers";
+import { claudeBin } from "./bin/_tools";
 
 const a = parseArgs(process.argv.slice(2), ["resume", "dry-run"]);
 const PHASES = num(a, "phases", 2)!;
-// Claude Code CLI: $CLAUDE_BIN, иначе ~/.local/bin/claude (родной установщик), иначе claude из PATH.
-const CLAUDE = process.env.CLAUDE_BIN ?? [join(process.env.HOME ?? "", ".local/bin/claude")].find((p) => existsSync(p)) ?? "claude";
 
 const briefArg = str(a, "brief") ?? (a.resume ? undefined : die("нужен --brief brief.md или --brief \"текст\""));
 const brief = briefArg === undefined ? undefined : existsSync(briefArg) ? readFileSync(briefArg, "utf8") : briefArg;
@@ -60,9 +61,17 @@ if (a.resume) {
 }
 console.error(`папка ролика: ${dir}`);
 if (a["dry-run"]) { console.log(JSON.stringify({ job: dir, final: join(dir, "out/final.mp4"), exists: false, dryRun: true })); process.exit(0); }
+// Claude Code CLI (режиссёр, по вашей подписке): $CLAUDE_BIN, ~/.local/bin/claude или из PATH.
+const CLAUDE = claudeBin() ?? die("не найден Claude Code CLI (claude): установите его — https://claude.com/claude-code — или задайте CLAUDE_BIN в .env");
+
+// Что подключено (studio doctor) — одной строкой в задаче директора, чтобы план ролика сразу
+// строился под имеющиеся провайдеры, а не упирался в «провайдер не настроен» посреди сборки.
+const vc = voiceConfig(), ic = imageConfig();
+const PROVIDERS = `Провайдеры: озвучка — ${vc.ready ? `${vc.provider} (${vc.model})` : `нет (${vc.problem})`}; картинки — ${ic.ready ? `${ic.provider} (${ic.model}${ic.transparency ? "" : ", без прозрачности"}${ic.refs ? "" : ", без --ref"})` : `нет (${ic.problem})`}. Подробно — \`studio doctor\`; чего нет — ролик строится без этого (CLAUDE.md «Провайдеры»).`;
 
 const RESULT_JSON = `Последнее сообщение — только JSON: {"final":"out/final.mp4","seconds":<длина>,"concept":"…","skills":["…"],"paid":{"tts":<n>,"images":<n>},"probe":"PASS|WARN|FAIL","critic":"<оценка критика 1–10 или null>","client_questions":["… — то же, что в notes.md «## Вопросы заказчику»: противоречия брифа, допущения, заглушки вместо настоящего товара/места/людей, обязательные пометки"],"open_issues":["…"]}`;
-const COMMON = `Рабочая папка — текущая (${dir}). Бриф — brief.md. Руководство студии — CLAUDE.md (уже в контексте). Не трогай ничего вне этой папки.
+const COMMON = `Рабочая папка — текущая (${dir}). Бриф — brief.md. Руководство студии — CLAUDE.md (уже в контексте). Не трогай ничего вне этой папки; .env студии не читай.
+${PROVIDERS}
 Работай экономно: скиллы — карточками (\`studio skill <имя>\`), API — \`studio api <модуль>\`, исходники проверок не читай; правки — Edit по месту, сцена — свой файл; из отчётов — сводка, которую печатает инструмент; картинки — те, что он велит открыть. Следи за строкой «бюджет: …» в выводе инструментов.`;
 
 const PROMPT_ONE = str(a, "prompt") ?? `Ты — режиссёр-постановщик ролика. ${COMMON}
@@ -104,7 +113,8 @@ const argsFor = (prompt: string, o: { model?: string; effort?: string; maxUsd: n
   // переключило бы ветку репо посреди прогона). git директору не нужен вовсе.
   "--setting-sources", "project,local",
   "--strict-mcp-config",
-  "--disallowedTools", "Bash(git:*)", "Bash(git *)",
+  // .env с ключами провайдеров директору не нужен: инструменты студии читают его сами.
+  "--disallowedTools", "Bash(git:*)", "Bash(git *)", `Read(/${ENV_FILE})`,
   "--add-dir", STUDIO,
   ...(o.model ? ["--model", o.model] : []),
   ...(o.effort ? ["--effort", o.effort] : []),
@@ -112,7 +122,9 @@ const argsFor = (prompt: string, o: { model?: string; effort?: string; maxUsd: n
 ];
 
 const log = join(dir, "director.log");
-const env = { ...process.env, PATH: `${join(STUDIO, "bin")}:${process.env.PATH}`, STUDIO_JOB: dir, STUDIO_ROOT: ROOT, STUDIO_BUDGET_USD: String(BUDGET_USD), STUDIO_BUDGET_MIN: String(BUDGET_MIN) };
+// Ключи из .env в окружение сессии Claude не передаются (их перечитают инструменты студии).
+const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !DOTENV_KEYS.includes(k)));
+const env = { ...baseEnv, PATH: `${join(STUDIO, "bin")}:${process.env.PATH}`, STUDIO_JOB: dir, STUDIO_ROOT: ROOT, STUDIO_BUDGET_USD: String(BUDGET_USD), STUDIO_BUDGET_MIN: String(BUDGET_MIN) };
 const t0 = Date.now();
 const limitMin = num(a, "timeout-min", 90)!;
 

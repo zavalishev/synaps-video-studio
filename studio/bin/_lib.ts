@@ -1,6 +1,8 @@
 // Общее для инструментов студии (studio/bin/*.ts): корень репо, папка ролика, разбор
 // аргументов, сборка Remotion с алиасом @studio, сбор отчёта страховки кадра из логов браузера.
-// Платные провайдеры (TTS, картинки) — _providers.ts; ffmpeg и кэш — _media.ts.
+// Платные провайдеры (TTS, картинки, тайминги) — _providers.ts; ffmpeg и кэш — _media.ts.
+// Настройки пользователя (.env в корне) загружаются первым импортом — до любых провайдеров.
+import "./_env";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";

@@ -1,0 +1,58 @@
+// Настройки пользователя из .env в корне репо (KEY=VALUE, как dotenv). Ключи провайдеров живут
+// только там: .env в .gitignore, образец — .env.example. Переменные, уже заданные в окружении,
+// не перезаписываются. Файл — $STUDIO_ENV_FILE, иначе <корень>/.env; STUDIO_DOTENV=0 — не читать.
+// Settings from <repo>/.env (dotenv style). Existing environment variables win.
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+
+// KEY=VALUE построчно; «export KEY=…» тоже; '…' — как есть, "…" — с \n \t \" \\; без кавычек —
+// до « #» (комментарий в конце строки).
+export const parseDotenv = (src: string): Record<string, string> => {
+  const out: Record<string, string> = {};
+  for (const raw of src.replace(/^﻿/, "").split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const m = line.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    if (!m) continue;
+    let v = m[2];
+    if (v.startsWith("'")) {
+      const end = v.indexOf("'", 1);
+      v = end > 0 ? v.slice(1, end) : v.slice(1);
+    } else if (v.startsWith('"')) {
+      let s = "";
+      for (let i = 1; i < v.length && v[i] !== '"'; i++) {
+        if (v[i] === "\\" && i + 1 < v.length) {
+          const c = v[++i];
+          s += c === "n" ? "\n" : c === "t" ? "\t" : c === "r" ? "\r" : c;
+        } else s += v[i];
+      }
+      v = s;
+    } else {
+      const hash = v.search(/\s#/);
+      v = (hash >= 0 ? v.slice(0, hash) : v).trim();
+    }
+    out[m[1]] = v;
+  }
+  return out;
+};
+
+// Загрузить файл в env (только отсутствующие ключи). Возвращает имена загруженных ключей.
+export const loadDotenv = (file: string, env: NodeJS.ProcessEnv = process.env): string[] => {
+  if (!existsSync(file)) return [];
+  const vars = parseDotenv(readFileSync(file, "utf8"));
+  const loaded: string[] = [];
+  for (const [k, v] of Object.entries(vars)) {
+    if (env[k] === undefined) { env[k] = v; loaded.push(k); }
+  }
+  return loaded;
+};
+
+export const ENV_FILE = process.env.STUDIO_ENV_FILE ?? join(ROOT_DIR, ".env");
+
+// Ключи, пришедшие из .env (а не из окружения): make.ts не передаёт их директору — инструменты
+// студии сами перечитают .env, а в окружении сессии Claude ключам делать нечего.
+export const DOTENV_KEYS: string[] =
+  process.env.STUDIO_DOTENV === "0" || process.env.VITEST ? [] : loadDotenv(ENV_FILE);

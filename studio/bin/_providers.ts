@@ -1,25 +1,11 @@
-// Провайдеры платных шагов студии: озвучка (studio voice) и картинки (studio image).
-// Здесь только контракт: каждый пользователь подключает своих провайдеров (свои ключи).
-// Пока провайдер не настроен, вызов падает с понятной ошибкой — остальная студия
-// (сцены, рендер, проверки, звук из каталога, Blender) работает без него.
-
-export class ProviderNotConfigured extends Error {
-  constructor(what: string) {
-    super(`${what}: провайдер не настроен — подключите свой (см. README, раздел «Провайдеры»)`);
-    this.name = "ProviderNotConfigured";
-  }
-}
-
-export type TtsRequest = { model: string; voice: string; input: string; instructions?: string; response_format?: string };
-// Озвучка одной реплики → аудио (mp3).
-export const tts = (_req: TtsRequest): Buffer => {
-  throw new ProviderNotConfigured("озвучка (TTS)");
-};
-
-export type ImageOptions = { size?: string; quality?: string; background?: string };
-// Модель картинок входит в ключ кэша .cache/studio-img: другая модель — другие картинки.
-export const IMAGE_MODEL = process.env.STUDIO_IMAGE_MODEL ?? "unconfigured";
-// Картинка по промпту → PNG; refs — уменьшенные JPEG-референсы (лист персонажа, стиль).
-export const image = async (_prompt: string, _opts: ImageOptions = {}, _refs: Buffer[] = []): Promise<Buffer> => {
-  throw new ProviderNotConfigured("картинки");
-};
+// Провайдеры платных шагов студии — каждый пользователь подключает своих в .env (образец .env.example):
+//   VOICE_PROVIDER = openai | elevenlabs | command | none   — studio voice   (_tts.ts)
+//   IMAGE_PROVIDER = openai | gemini | command | none       — studio image   (_img.ts)
+//   ASR_PROVIDER   = auto | whisper | openai | none         — тайминги слов  (_asr.ts)
+// command — любая своя программа по шаблону команды (Kimi-Audio, Silero, Piper, XTTS, ComfyUI…).
+// Что настроено и что директор может сделать — `studio doctor`. Ключи никогда не печатаются.
+// Paid-step providers. Configure in .env; check with `studio doctor`.
+export { ProviderError, ProviderNotConfigured, redact, SECRET_VARS, type Deps } from "./_http";
+export { charsToWords, OPENAI_VOICES, tts, voiceConfig, type TimedWord, type TtsRequest, type TtsResult, type VoiceConfig } from "./_tts";
+export { image, imageConfig, removeBackground, type ImageConfig, type ImageOptions, type ImageResult } from "./_img";
+export { asrPlan, retime, transcribeOpenAI, whisperLocal, type AsrStep } from "./_asr";
