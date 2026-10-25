@@ -56,3 +56,12 @@ export const ENV_FILE = process.env.STUDIO_ENV_FILE ?? join(ROOT_DIR, ".env");
 // студии сами перечитают .env, а в окружении сессии Claude ключам делать нечего.
 export const DOTENV_KEYS: string[] =
   process.env.STUDIO_DOTENV === "0" || process.env.VITEST ? [] : loadDotenv(ENV_FILE);
+
+// Окружение режиссёра (claude -p из make.ts): без ключей, пришедших из .env (инструменты студии
+// перечитают .env сами), и без переменных родительской сессии Claude Code — при запуске из
+// интерактивного claude (скилл make-video) вложенный claude -p иначе считает себя частью чужой
+// сессии. Авторизация пользователя (подписка, CLAUDE_CODE_OAUTH_TOKEN, Bedrock/Vertex) остаётся.
+// Director env: drops .env keys and parent Claude Code session variables, keeps the user's auth.
+const PARENT_SESSION = /^(CLAUDECODE|CLAUDE_PID|CLAUDE_AGENT_SDK_VERSION|CLAUDE_CODE_(ENTRYPOINT|SESSION_\w+|CHILD_SESSION|MESSAGING_\w+|SSE_PORT|EXECPATH))$/;
+export const directorEnv = (env: NodeJS.ProcessEnv, dotenvKeys: string[]): Record<string, string> =>
+  Object.fromEntries(Object.entries(env).filter((e): e is [string, string] => e[1] !== undefined && !dotenvKeys.includes(e[0]) && !PARENT_SESSION.test(e[0])));

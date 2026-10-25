@@ -37,7 +37,7 @@ import { clientQuestions } from "./skills/claims-and-compliance/facts";
 import { join } from "node:path";
 import { createJob, JOBS, linkSkills, slugify } from "./bin/_job";
 import { die, num, parseArgs, ROOT, STUDIO, str } from "./bin/_lib";
-import { DOTENV_KEYS, ENV_FILE } from "./bin/_env";
+import { directorEnv, DOTENV_KEYS, ENV_FILE } from "./bin/_env";
 import { imageConfig, voiceConfig } from "./bin/_providers";
 import { claudeBin } from "./bin/_tools";
 
@@ -123,7 +123,9 @@ const argsFor = (prompt: string, o: { model?: string; effort?: string; maxUsd: n
 
 const log = join(dir, "director.log");
 // Ключи из .env в окружение сессии Claude не передаются (их перечитают инструменты студии).
-const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !DOTENV_KEYS.includes(k)));
+// … и переменные родительской сессии Claude Code тоже (directorEnv в _env.ts).
+const baseEnv = directorEnv(process.env, DOTENV_KEYS);
+if (baseEnv.ANTHROPIC_API_KEY?.trim()) console.error("внимание: в окружении задан ANTHROPIC_API_KEY — Claude Code спишет работу директора с API-счёта, а не с подписки. Нужна подписка — запустите без него (env -u ANTHROPIC_API_KEY npm run make -- …).");
 const env = { ...baseEnv, PATH: `${join(STUDIO, "bin")}:${process.env.PATH}`, STUDIO_JOB: dir, STUDIO_ROOT: ROOT, STUDIO_BUDGET_USD: String(BUDGET_USD), STUDIO_BUDGET_MIN: String(BUDGET_MIN) };
 const t0 = Date.now();
 const limitMin = num(a, "timeout-min", 90)!;

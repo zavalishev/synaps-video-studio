@@ -1,12 +1,23 @@
+# зависимости и кэши / dependencies and caches
 node_modules/
 .cache/
-jobs/
-out/
 .bundle/
+.remotion/
 __pycache__/
 *.pyc
+
+# ролики и результаты / jobs and renders
+jobs/
+out/
+
+# секреты / secrets
 .env
 .env.*
 !.env.example
+
+# локальные настройки Claude Code / local Claude Code settings
+.claude/settings.local.json
+
+# прочее / misc
 *.log
 .DS_Store

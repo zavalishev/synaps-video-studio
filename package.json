@@ -1,12 +1,30 @@
 {
   "name": "ai-video-studio",
   "version": "0.1.0",
-  "private": true,
-  "description": "Agentic short-video studio: Claude Code as the director, Remotion + skills as the crew. Brief in, vertical MP4 out.",
+  "private": false,
+  "description": "Agentic AI motion-design studio for Reels/Shorts: Claude Code is the director, Remotion + skills are the crew. Brief in, vertical MP4 out.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/<owner>/ai-video-studio.git"
+  },
+  "keywords": [
+    "remotion",
+    "claude-code",
+    "video",
+    "reels",
+    "shorts",
+    "motion-design",
+    "ai-agent"
+  ],
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
+    "setup": "node scripts/setup.mjs",
     "make": "tsx studio/make.ts",
+    "doctor": "studio/bin/studio doctor",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run"
   },
