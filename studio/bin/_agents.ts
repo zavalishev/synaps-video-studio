@@ -23,6 +23,7 @@ export type RunOpts = { prompt: string; dir: string; studio: string; model?: str
 
 export type Agent = {
   name: AgentName;
+  auth: RegExp;               // переменные входа этого агента — только они переходят в окружение режиссёра
   bin: string;
   title: string;              // для людей: «Claude Code», «Codex CLI»
   costInUsd: boolean;         // поток событий несёт цену (Claude) или только токены (Codex)
@@ -39,8 +40,12 @@ const install: Record<AgentName, string> = {
 };
 
 // ---------- Claude Code ----------
+// Вход каждого агента — только ему: режиссёр Codex не получает ключей Anthropic/AWS, Claude — Codex.
+export const CLAUDE_AUTH = /^(ANTHROPIC_\w+|CLAUDE_CODE_OAUTH_TOKEN|AWS_\w+|CLOUD_ML_REGION|VERTEX_\w+|GOOGLE_APPLICATION_CREDENTIALS|GOOGLE_CLOUD_PROJECT)$/;
+export const CODEX_AUTH = /^(CODEX_API_KEY|CODEX_ACCESS_TOKEN)$/;
+
 const claude = (bin: string): Agent => ({
-  name: "claude", bin, title: "Claude Code", costInUsd: true, subagents: true,
+  name: "claude", auth: CLAUDE_AUTH, bin, title: "Claude Code", costInUsd: true, subagents: true,
   args: (o) => [
     "-p", o.prompt,
     "--output-format", "stream-json", "--verbose",
@@ -127,8 +132,13 @@ export const codexParser = () => {
   };
 };
 
+// Возможности Codex уровня аккаунта и встроенные, которые --ignore-user-config не выключает:
+// приложения ChatGPT, плагины, браузер, управление компьютером, хуки. Режиссёру они не нужны
+// (как MCP-серверы у Claude — --strict-mcp-config), а без песочницы были бы лишним доступом.
+export const CODEX_OFF = ["apps", "plugins", "remote_plugin", "browser_use", "browser_use_external", "computer_use", "in_app_browser", "hooks"];
+
 const codex = (bin: string): Agent => ({
-  name: "codex", bin, title: "Codex CLI", costInUsd: false, subagents: true,
+  name: "codex", auth: CODEX_AUTH, bin, title: "Codex CLI", costInUsd: false, subagents: true,
   args: (o) => [
     "exec", "--json",
     // Личный ~/.codex/config.toml владельца (модель, уведомления, плагины, MCP) директору не нужен —
@@ -137,6 +147,7 @@ const codex = (bin: string): Agent => ({
     // Папка ролика — не git-репозиторий (GIT_CEILING_DIRECTORIES в env): git директору не нужен.
     "--skip-git-repo-check",
     "-c", "notify=[]",
+    ...CODEX_OFF.flatMap((f) => ["--disable", f]),
     // Руководство студии (AGENTS.md = studio/CLAUDE.md) ≈ 30 КБ — больше обычного лимита Codex.
     "-c", "project_doc_max_bytes=131072",
     "-c", 'approval_policy="never"',

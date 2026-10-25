@@ -73,6 +73,7 @@ if (a["dry-run"]) { console.log(JSON.stringify({ job: dir, final: join(dir, "out
 const AGENT: Agent = (() => { try { return pickAgent(str(a, "agent")); } catch (e) { return die((e as Error).message); } })();
 console.error(`режиссёр: ${AGENT.title} (${AGENT.bin})`);
 if (AGENT.name === "codex" && !codexLogin()) console.error("внимание: Codex CLI не вошёл (нет auth.json) — выполните codex login (подписка ChatGPT) и повторите.");
+if (AGENT.name === "codex" && (codexLogin() === "apikey" || process.env.CODEX_API_KEY?.trim())) console.error("внимание: Codex вошёл по ключу API (или задан CODEX_API_KEY) — работа директора спишется с API-счёта OpenAI, а не с подписки ChatGPT. Нужна подписка — codex login без ключа."); 
 
 // Что подключено (studio doctor) — одной строкой в задаче директора, чтобы план ролика сразу
 // строился под имеющиеся провайдеры, а не упирался в «провайдер не настроен» посреди сборки.
@@ -117,7 +118,7 @@ const runOpts = (prompt: string, o: { model?: string; effort?: string; maxUsd: n
 const log = join(dir, "director.log");
 // Ключи из .env в окружение сессии Claude не передаются (их перечитают инструменты студии).
 // … и переменные родительской сессии Claude Code тоже (directorEnv в _env.ts).
-const baseEnv = directorEnv(process.env, DOTENV_KEYS);
+const baseEnv = directorEnv(process.env, DOTENV_KEYS, AGENT.auth);
 const fromShell = shellSecrets(process.env, DOTENV_KEYS);
 if (fromShell.length) console.error(`внимание: ${fromShell.join(", ")} заданы в окружении оболочки (например, в ~/.zshrc). В окружение директора они не передаются (одна команда env — и ключ в контексте модели и в director.log), поэтому инструменты студии внутри прогона возьмут ключи только из .env — перенесите их туда, если их там нет.`);
 if (AGENT.name === "claude" && baseEnv.ANTHROPIC_API_KEY?.trim()) console.error("внимание: в окружении задан ANTHROPIC_API_KEY — Claude Code спишет работу директора с API-счёта, а не с подписки. Нужна подписка — запустите без него (env -u ANTHROPIC_API_KEY npm run make -- …).");

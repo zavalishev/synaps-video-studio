@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { codexCommand, codexParser, pickAgent, type RunOpts } from "../studio/bin/_agents";
+import { CLAUDE_AUTH, CODEX_AUTH, codexCommand, codexParser, pickAgent, type RunOpts } from "../studio/bin/_agents";
 import { directorEnv } from "../studio/bin/_env";
 import { codexImagePrompt } from "../studio/bin/_img";
 import { budgetLine, readBudget } from "../studio/bin/_lib";
@@ -143,7 +143,7 @@ describe("картинки по подписке Codex", () => {
     };
     const r = await image("a fox", { size: "1024x1024", background: "transparent" }, [Buffer.from("a"), Buffer.from("b")], { env, run });
     expect(r.data.toString()).toBe("PNGDATA");
-    expect(seen).toMatch(/exec --json --ephemeral .*-s read-only .*-i "\$\{STUDIO_CMD_REF1\}" -i "\$\{STUDIO_CMD_REF2\}" - < /);
+    expect(seen).toMatch(/exec --json --ephemeral .*--disable apps .*-s read-only .* - -i "\$\{STUDIO_CMD_REF1\}" -i "\$\{STUDIO_CMD_REF2\}" < /);
     expect(refsSeen).toBe(2);
     expect(prompt).toMatch(/a fox$/);
   });
@@ -162,8 +162,13 @@ describe("картинки по подписке Codex", () => {
 
 describe("окружение и студия", () => {
   it("директору не достаются переменные песочницы родительского Codex; вход Codex остаётся", () => {
-    const out = directorEnv({ CODEX_SANDBOX: "seatbelt", CODEX_SANDBOX_NETWORK_DISABLED: "1", CODEX_API_KEY: "k", CODEX_HOME: "/h", PATH: "/bin" }, []);
-    expect(out).toEqual({ CODEX_API_KEY: "k", CODEX_HOME: "/h", PATH: "/bin" });
+    const env = { CODEX_SANDBOX: "seatbelt", CODEX_SANDBOX_NETWORK_DISABLED: "1", CODEX_API_KEY: "k", CODEX_HOME: "/h", ANTHROPIC_API_KEY: "a", CLAUDE_CODE_OAUTH_TOKEN: "o", PATH: "/bin" };
+    expect(directorEnv(env, [], CODEX_AUTH)).toEqual({ CODEX_API_KEY: "k", CODEX_HOME: "/h", PATH: "/bin" });
+  });
+  it("вход другого агента режиссёру не передаётся", () => {
+    const env = { CODEX_API_KEY: "k", ANTHROPIC_API_KEY: "a", CLAUDE_CODE_OAUTH_TOKEN: "o", PATH: "/bin" };
+    expect(directorEnv(env, [], CLAUDE_AUTH)).toEqual({ ANTHROPIC_API_KEY: "a", CLAUDE_CODE_OAUTH_TOKEN: "o", PATH: "/bin" });
+    expect(pickAgent("codex", { CODEX_BIN: BIN }).auth).toBe(CODEX_AUTH);
   });
   it("сверка studio/: добавленные, изменённые и удалённые файлы", () => {
     const root = tmp();

@@ -142,6 +142,7 @@ export const codexImagePrompt = (prompt: string, o: ImageOptions, nRefs: number)
     prompt,
   ].filter(Boolean).join("\n");
 };
+const CODEX_IMG_OFF = ["apps", "plugins", "remote_plugin", "browser_use", "browser_use_external", "computer_use", "in_app_browser", "hooks"].map((f) => `--disable ${f}`).join(" ");
 const imageCodex = async (prompt: string, o: ImageOptions, refs: Buffer[], _cfg: ImageConfig, d: D): Promise<ImageResult> => {
   const bin = codexBin(d.env);
   if (!bin) throw new ProviderNotConfigured("картинки Codex: нет Codex CLI (npm i -g @openai/codex, затем codex login)");
@@ -151,8 +152,12 @@ const imageCodex = async (prompt: string, o: ImageOptions, refs: Buffer[], _cfg:
     writeFileSync(pf, codexImagePrompt(prompt, o, refs.length));
     const vars: Record<string, string> = { bin, dir, prompt_file: pf, events };
     const refArgs = refs.map((b, i) => { const k = `ref${i + 1}`; vars[k] = join(dir, `${k}.jpg`); writeFileSync(vars[k], b); return `-i {${k}}`; }).join(" ");
-    const tpl = `{bin} exec --json --ephemeral --skip-git-repo-check --ignore-user-config -c 'notify=[]' -s read-only -C {dir} ${refArgs} - < {prompt_file} > {events}`;
-    runCommand("картинки Codex", tpl, vars, d, timeout(d));
+    // «-» (промпт из stdin) — до -i: у -i несколько значений подряд, и «-» после него стал бы картинкой.
+    const tpl = `{bin} exec --json --ephemeral --skip-git-repo-check --ignore-user-config -c 'notify=[]' ${CODEX_IMG_OFF} -s read-only -C {dir} - ${refArgs} < {prompt_file} > {events}`;
+    // Ненулевой код (лимит подписки, отказ) — причина в событиях на stdout, а не в stderr: сначала
+    // читаем события, потом решаем, чем ошибиться.
+    let runErr: unknown = null;
+    try { runCommand("картинки Codex", tpl, vars, d, timeout(d)); } catch (e) { runErr = e; }
     const lines = existsSync(events) ? readFileSync(events, "utf8").split("\n").filter((l) => l.startsWith("{")) : [];
     let thread = "", said = "", failed = "";
     for (const l of lines) {
@@ -165,6 +170,7 @@ const imageCodex = async (prompt: string, o: ImageOptions, refs: Buffer[], _cfg:
     }
     const out = thread ? join(codexHome(d.env), "generated_images", thread) : "";
     const files = out && existsSync(out) ? readdirSync(out).filter((f) => /\.png$/i.test(f)).map((f) => join(out, f)).sort((x, y) => statSync(y).mtimeMs - statSync(x).mtimeMs) : [];
+    if (runErr && (failed || !files.length)) throw failed ? new ProviderError(`картинки Codex: ${failed.slice(0, 400)}`) : runErr;
     if (!files.length) throw new ProviderError(`картинки Codex: картинки нет${failed ? ` (${failed})` : ""}${said ? `: ${said.slice(0, 300)}` : ""}`);
     return { data: readFileSync(files[0]), notes: files.length > 1 ? [`Codex сделал ${files.length} картинок — взята последняя`] : [] };
   } finally { rmSync(dir, { recursive: true, force: true }); }
