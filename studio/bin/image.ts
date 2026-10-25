@@ -21,7 +21,7 @@ import { dirname, join } from "node:path";
 import sharp from "sharp";
 import { cacheDir, sha } from "./_media";
 import { image, imageConfig } from "./_providers";
-import { die, ensureDir, inJob, jobDir, parseArgs, str } from "./_lib";
+import { die, ensureDir, inJobStrict, jobDir, jobPath, parseArgs, str } from "./_lib";
 
 const a = parseArgs(process.argv.slice(2), ["force", "no-retry"]);
 const dir = jobDir(a);
@@ -29,7 +29,7 @@ const cfg = imageConfig();
 if (cfg.provider === "none") die("картинки выключены (IMAGE_PROVIDER=none): собирайте кадр без генерации — кодом (@studio, kinetic-typography, explainer-cards, data-viz), paper-2d, Blender (studio blender), фото заказчика (brand.photos). Нужны картинки — владелец студии подключает провайдера в .env (studio doctor).");
 if (!cfg.ready) die(`картинки: ${cfg.problem} — см. .env.example и studio doctor`);
 const pf = str(a, "prompt-file");
-const prompt = (pf ? readFileSync(inJob(dir, pf), "utf8") : a._.join(" ")).trim() || die("нужен промпт: studio image \"…\"");
+const prompt = (pf ? readFileSync(inJobStrict(dir, pf, "--prompt-file"), "utf8") : a._.join(" ")).trim() || die("нужен промпт: studio image \"…\"");
 const size = str(a, "size", "1024x1024")!;
 const quality = str(a, "quality", "medium")!;
 const bg = str(a, "bg", "transparent")!;
@@ -39,9 +39,9 @@ if (!["low", "medium", "high", "auto"].includes(quality)) die("--quality: low | 
 
 // Референсы: файл в public/ или путь от папки ролика.
 const refs = (str(a, "ref") ?? "").split(",").map((r) => r.trim()).filter(Boolean).map((r) => {
-  const cands = [inJob(dir, join("public", r.replace(/^public\//, ""))), inJob(dir, r)];
-  const f = cands.find((c) => existsSync(c));
-  if (!f) die(`--ref: нет файла ${r}`);
+  const cands = [jobPath(dir, join("public", r.replace(/^public\//, ""))), jobPath(dir, r)];
+  const f = cands.find((c): c is string => c !== null && existsSync(c));
+  if (!f) die(cands.every((c) => c === null) ? `--ref: ${r} — вне папки ролика (референсы — только файлы ролика, например public/brand/…)` : `--ref: нет файла ${r}`);
   return f!;
 });
 if (refs.length && !cfg.refs) console.error(`ВНИМАНИЕ: провайдер ${cfg.tag} не принимает референсы — герой может не совпасть с листом; держите признаки героя словами в промпте`);
@@ -86,7 +86,7 @@ const main = async () => {
   if (mismatch) console.error(`ВНИМАНИЕ: ориентация не та (${m0.width}×${m0.height} вместо ${size}). Фон 9:16 из горизонтали обрежется по бокам и растянется — переформулируйте сцену вертикально или постройте кадр так, чтобы фон не шёл во весь экран.`);
   for (const n of notesOf.get(cached) ?? []) console.error(`провайдер: ${n}`);
   const rel = str(a, "out") ?? `img/${keyOf(usedPrompt)}.png`;
-  const out = inJob(dir, join("public", rel.replace(/^public\//, "")));
+  const out = inJobStrict(dir, join("public", rel.replace(/^public\//, "")), "--out");
   ensureDir(dirname(out));
   copyFileSync(cached, out);
   const meta = await sharp(out).metadata();
@@ -96,9 +96,9 @@ const main = async () => {
     alpha = st.channels[0].min < 250 ? "есть прозрачные пиксели" : "канал есть, но всё непрозрачно";
   }
   if (bg === "transparent" && alpha !== "есть прозрачные пиксели") console.error("ВНИМАНИЕ: просили прозрачный фон, а прозрачных пикселей нет — это не вырезка (cutout.ts фон не уберёт): ставьте предмет в карточку/на однотонный фон или задайте IMAGE_BG_COMMAND.");
-  const manifest = inJob(dir, "public/images.json");
+  const manifest = join(dir, "public/images.json");
   const list = existsSync(manifest) ? JSON.parse(readFileSync(manifest, "utf8")) : [];
-  const fileRel = out.slice(inJob(dir, "public").length + 1);
+  const fileRel = out.slice(join(dir, "public").length + 1);
   const entry = { file: fileRel, prompt: usedPrompt, size, quality, bg, model: cfg.tag, key: keyOf(usedPrompt), w: meta.width, h: meta.height, ...(mismatch ? { orientationMismatch: true } : {}), ...(refs.length ? { refs: refs.map((r) => r.slice(dir.length + 1)) } : {}) };
   writeFileSync(manifest, JSON.stringify([...list.filter((e: { file: string }) => e.file !== fileRel), entry], null, 1));
   console.log(`${out}\n  ${meta.width}×${meta.height}, прозрачность: ${alpha}; staticFile("${fileRel}")`);

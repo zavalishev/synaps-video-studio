@@ -2,7 +2,7 @@
 // Image generation providers configured in .env.
 import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { deps, fetchRetry, fill, need, pick, ProviderError, ProviderNotConfigured, runCommand, short, tmp, type D, type Deps, type Env } from "./_http";
+import { deps, fetchRetry, need, pick, ProviderError, ProviderNotConfigured, runCommand, short, templateProblem, tmp, type D, type Deps, type Env } from "./_http";
 
 export type ImageConfig = {
   provider: string; model: string; ready: boolean; problem?: string;
@@ -14,6 +14,7 @@ export type ImageConfig = {
 export type ImageOptions = { size?: string; quality?: string; background?: string };
 export type ImageResult = { data: Buffer; notes: string[] };
 
+export const IMAGE_PLACEHOLDERS = ["prompt_file", "out_png", "out", "size", "width", "height", "quality", "background", "refs"];
 export const imageConfig = (env: Env = process.env): ImageConfig => {
   const p = (env.IMAGE_PROVIDER ?? "").trim().toLowerCase() || "none";
   const bgRemover = Boolean(env.IMAGE_BG_COMMAND?.trim());
@@ -31,7 +32,8 @@ export const imageConfig = (env: Env = process.env): ImageConfig => {
   }
   if (p === "command") {
     const tpl = env.IMAGE_COMMAND?.trim() ?? "";
-    return { provider: p, model: "command", ready: Boolean(tpl), problem: tpl ? undefined : "нет IMAGE_COMMAND", tag: `command:${short(tpl)}`,
+    const bad = tpl ? templateProblem("IMAGE_COMMAND", tpl, IMAGE_PLACEHOLDERS) : "нет IMAGE_COMMAND";
+    return { provider: p, model: "command", ready: !bad, problem: bad, tag: `command:${short(tpl)}`,
       transparency: env.IMAGE_COMMAND_TRANSPARENT === "1", refs: /\{refs\}/.test(tpl), bgRemover };
   }
   if (p === "none") return { provider: "none", ...off, problem: "картинки выключены (IMAGE_PROVIDER=none)", tag: "none" };
@@ -121,9 +123,8 @@ const imageCommand = async (prompt: string, o: ImageOptions, refs: Buffer[], cfg
     writeFileSync(pf, prompt);
     const refFiles = refs.map((b, i) => { const f = join(dir, `ref${i + 1}.jpg`); writeFileSync(f, b); return f; });
     const [w, h] = SIZES[o.size ?? ""] ?? [1024, 1024];
-    const cmd = fill(tpl, { prompt_file: pf, out_png: out, out, size: o.size ?? "1024x1024", width: String(w), height: String(h),
-      quality: o.quality ?? "medium", background: o.background ?? "auto", refs: refFiles.join(",") });
-    runCommand("картинки (IMAGE_COMMAND)", cmd, d, timeout(d));
+    runCommand("картинки (IMAGE_COMMAND)", tpl, { prompt_file: pf, out_png: out, out, size: o.size ?? "1024x1024", width: String(w), height: String(h),
+      quality: o.quality ?? "medium", background: o.background ?? "auto", refs: refFiles.join(",") }, d, timeout(d));
     if (!existsSync(out) || statSync(out).size === 0) throw new ProviderError("картинки (IMAGE_COMMAND): команда не записала картинку в {out_png}");
     const notes = refs.length && !cfg.refs ? ["в IMAGE_COMMAND нет {refs} — референсы не переданы"] : [];
     return { data: readFileSync(out), notes };
@@ -139,7 +140,7 @@ export const removeBackground = async (png: Buffer, dep: Deps = {}): Promise<Buf
   try {
     const inp = join(dir, "in.png"), out = join(dir, "out.png");
     writeFileSync(inp, png);
-    runCommand("удаление фона (IMAGE_BG_COMMAND)", fill(tpl, { in_png: inp, out_png: out }), d, 300_000);
+    runCommand("удаление фона (IMAGE_BG_COMMAND)", tpl, { in_png: inp, out_png: out }, d, 300_000);
     if (!existsSync(out) || statSync(out).size === 0) throw new ProviderError("удаление фона: команда не записала {out_png}");
     return readFileSync(out);
   } finally { rmSync(dir, { recursive: true, force: true }); }

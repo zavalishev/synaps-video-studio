@@ -13,7 +13,7 @@ studio <инструмент> [аргументы]      — запускать �
       {"voice","style","pace","gap","lines":["…",{"id","say","pace","before","after","style","voice"}]}.
       Провайдер — VOICE_PROVIDER в .env (openai | elevenlabs | command | none); платно, кэш .cache/tts.
       Голос по умолчанию — из .env (OpenAI: alloy ash ballad coral echo fable nova onyx sage shimmer
-      verse; ElevenLabs: Voice ID, в том числе свой клон). --style — только где doctor пишет «работает».
+      verse marin cedar; ElevenLabs: Voice ID, в том числе свой клон). --style — только где doctor пишет «работает».
       Тайминги слов: из ответа озвучки → whisper.cpp → OpenAI transcription → пропорция (words.json
       поле timing). none — озвучки нет: ролик без речи. job.json переключается на длину от аудио.
 

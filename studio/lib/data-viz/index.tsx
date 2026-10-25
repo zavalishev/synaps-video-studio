@@ -254,7 +254,7 @@ export const LineChart: React.FC<{
   const g = grow(frame, p.start ?? 0, p.dur ?? 45);
   const len = getLength(d);
   const ev = evolvePath(g, d);
-  const tip = getPointAtLength(d, Math.max(0.01, len * g));
+  const tip = getPointAtLength(d, Math.max(0.01, len * g)) ?? { x: 0, y: 0 };
   const col = p.color ?? t.accent;
   const sw = p.strokeWidth ?? 10;
   const gid = `lg-${p.id ?? "line"}`;

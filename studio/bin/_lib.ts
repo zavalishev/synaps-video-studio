@@ -3,8 +3,8 @@
 // Платные провайдеры (TTS, картинки, тайминги) — _providers.ts; ffmpeg и кэш — _media.ts.
 // Настройки пользователя (.env в корне) загружаются первым импортом — до любых провайдеров.
 import "./_env";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -72,6 +72,34 @@ export type JobConfig = {
 export const readJob = (dir: string): JobConfig => JSON.parse(readFileSync(join(dir, "job.json"), "utf8"));
 
 export const inJob = (dir: string, p: string) => (isAbsolute(p) ? p : join(dir, p));
+
+// Путь строго внутри папки ролика (с учётом ссылок): то, что уходит провайдеру (промпт-файл,
+// референсы, реплики) или пишется инструментом. Иначе null. Абсолютный путь, «..» и ссылка
+// наружу (~/.ssh/id_rsa, .env студии) не проходят — даже если директора уговорил текст брифа.
+// Path confined to the job folder (symlinks resolved), or null.
+export const jobPath = (dir: string, p: string): string | null => {
+  const abs = resolve(dir, p);
+  let root: string;
+  try { root = realpathSync(dir); } catch { return null; }
+  let cur = abs;
+  const rest: string[] = [];
+  for (;;) {
+    let isLink = false, present = false;
+    try { const st = lstatSync(cur); present = true; isLink = st.isSymbolicLink(); } catch { /* нет такого */ }
+    if (present) {
+      if (isLink && !existsSync(cur)) return null; // висячая ссылка: запись ушла бы по ней
+      break;
+    }
+    const up = dirname(cur);
+    if (up === cur) return null;
+    rest.unshift(basename(cur));
+    cur = up;
+  }
+  const real = join(realpathSync(cur), ...rest);
+  return real === root || real.startsWith(root + sep) ? abs : null;
+};
+export const inJobStrict = (dir: string, p: string, what = "путь"): string =>
+  jobPath(dir, p) ?? die(`${what}: ${p} — вне папки ролика. Инструменты студии берут и пишут файлы только внутри неё; нужен внешний файл — сначала скопируйте его сюда (владелец студии — через --brand).`);
 
 // ---------- Remotion ----------
 export const COMPOSITION = "Video";

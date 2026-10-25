@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { directorEnv } from "../studio/bin/_env";
+import { directorEnv, shellSecrets } from "../studio/bin/_env";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SKIP = new Set(["node_modules", ".git", ".cache", "jobs", "out", ".bundle", ".remotion"]);
@@ -90,15 +90,16 @@ describe("вход для агентов", () => {
     }
   });
 
-  it("примеры брифов: шесть жанров, у каждого заголовок и публикующий", () => {
+  it("примеры брифов: шесть жанров и английский, у каждого заголовок, публикующий, пометка «вымышлено»", () => {
     const dir = join(ROOT, "examples/briefs");
     const briefs = readdirSync(dir).filter((f) => f.endsWith(".md"));
-    expect(briefs.length).toBe(6);
+    expect(briefs.length).toBe(7);
     for (const f of briefs) {
       const s = readFileSync(join(dir, f), "utf8");
       expect(s, f).toMatch(/^# \S/);
-      expect(s, f).toContain("Кто публикует:");
-      expect(s, f).toMatch(/вымышлен/);
+      expect(s, f).toMatch(/Кто публикует:|Who publishes:/);
+      expect(s, f).toMatch(/вымышлен|made up/);
+      expect(s, f).toMatch(/@example_\w+/);
     }
   });
 
@@ -112,14 +113,17 @@ describe("вход для агентов", () => {
 });
 
 describe("окружение режиссёра", () => {
-  it("без ключей из .env и без переменных родительской сессии Claude Code; авторизация остаётся", () => {
+  it("без ключей из .env и оболочки и без переменных родительской сессии Claude Code; авторизация остаётся", () => {
     const env = {
       PATH: "/usr/bin", HOME: "/home/u", OPENAI_API_KEY: "from-dotenv",
       CLAUDECODE: "1", CLAUDE_PID: "42", CLAUDE_CODE_ENTRYPOINT: "cli", CLAUDE_CODE_SESSION_ID: "s",
       CLAUDE_CODE_SSE_PORT: "1", CLAUDE_CODE_MESSAGING_TOKEN: "t", CLAUDE_AGENT_SDK_VERSION: "1",
       CLAUDE_CODE_OAUTH_TOKEN: "user-auth", CLAUDE_CODE_USE_BEDROCK: "1", ELEVENLABS_API_KEY: "from-shell",
+      GEMINI_API_KEY: "from-shell", GITHUB_TOKEN: "gh", KIMI_SECRET: "k", HF_TOKEN: "hf", DB_PASSWORD: "p",
+      ANTHROPIC_BASE_URL: "https://api.example", AWS_SECRET_ACCESS_KEY: "aws", AWS_REGION: "us-east-1",
     };
     const out = directorEnv(env, ["OPENAI_API_KEY"]);
-    expect(Object.keys(out).sort()).toEqual(["CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "ELEVENLABS_API_KEY", "HOME", "PATH"]);
+    expect(Object.keys(out).sort()).toEqual(["ANTHROPIC_BASE_URL", "AWS_REGION", "AWS_SECRET_ACCESS_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "HOME", "PATH"]);
+    expect(shellSecrets(env, ["OPENAI_API_KEY"]).sort()).toEqual(["ELEVENLABS_API_KEY", "GEMINI_API_KEY"]);
   });
 });

@@ -43,24 +43,72 @@ avoids repeating the same typeface and palette.
 
 ## Quick start
 
-You need macOS (primary platform) or Linux, Node 22+ (tested on 24), ffmpeg, and
-[Claude Code](https://claude.com/claude-code) with a Claude Pro or Max subscription.
+You need macOS (primary platform) or Linux, Node 22+ (tested on 24, see `.nvmrc`), ffmpeg,
+[Claude Code](https://claude.com/claude-code) with a Claude Pro or Max subscription, and an
+internet connection (rendering fetches Google Fonts). On a Mac, install
+[Homebrew](https://brew.sh) first if you don't have it: it also installs the Xcode Command Line
+Tools that `git` needs.
 
 ```bash
-brew install node ffmpeg                       # 1. on Linux: nodejs 22+ and ffmpeg from your package manager
-git clone https://github.com/<owner>/ai-video-studio && cd ai-video-studio   # 2.
-npm run setup                                  # 3. packages, tool check, .env, whisper model, doctor
-claude                                         # 4. sign in and say: "make a video from examples/briefs/01-coffee-promo.md"
-npm run make -- --brief examples/briefs/05-event.md   # 5. or headless: result in jobs/<slug>/out/final.mp4
+# 1. Tools (Linux: see below)
+brew install node ffmpeg
+curl -fsSL https://claude.ai/install.sh | bash   # Claude Code; installs to ~/.local/bin — add it to PATH if `claude` isn't found
+
+# 2. The studio
+git clone https://github.com/<owner>/ai-video-studio && cd ai-video-studio
+npm run setup                                    # packages, tool check, .env, whisper model, doctor
+
+# 3. Sign in to Claude Code with your subscription, once
+claude                                           # inside: /login
 ```
 
-Optional: `brew install --cask blender` for 3D assets and `brew install whisper-cpp` for precise
-word timings in captions. `npm run setup` offers to download a whisper model (about 0.5 GB,
-free).
+Then either:
+
+- **4a. In a session.** In that same `claude` session (started in the repository root) say:
+  "make a video from examples/briefs/07-en-bakery.md".
+- **4b. Headless.** `npm run make -- --brief examples/briefs/07-en-bakery.md`
+
+A run takes 10–20 minutes and prints its progress; don't interrupt it (an interrupted run
+continues with `--resume`, see below). At the end it prints JSON: the video path is in the
+`final` field, usually `jobs/<name>/out/final.mp4`, where the folder name comes from the brief's
+title.
+
+**Free voice on a Mac.** No keys yet? The built-in macOS synthesizer is enough for a first
+video. Put this in `.env`:
+
+```bash
+VOICE_PROVIDER=command
+VOICE_COMMAND=say -v Samantha -f {text_file} -o {out_wav} --data-format=LEI16@22050
+```
+
+(For Russian use `-v Milena`.) A voice may need downloading first: System Settings →
+Accessibility → Spoken Content → System voice → Manage Voices. Check with `npm run doctor`.
+
+**Optional:** `brew install --cask blender` for 3D assets (tested on Blender 5.2; older versions
+may not work) and `brew install whisper-cpp` for precise word timings in captions.
+`npm run setup` offers to download a whisper model (about 0.5 GB, free, SHA-256 verified).
+
+**Linux.** Install Node 24 with [nvm](https://github.com/nvm-sh/nvm) (`nvm install 24`) or
+NodeSource: apt usually ships Node 18 or 20, which is too old. ffmpeg: `sudo apt install ffmpeg`.
+Chrome Headless Shell, which Remotion renders with, needs system libraries:
+<https://www.remotion.dev/docs/miscellaneous/linux-dependencies>. Blender:
+`sudo snap install blender --classic`.
+
+### Example briefs
+
+| Example | What it needs |
+|---|---|
+| `01-coffee-promo` … `05-event` (Russian) | nothing required; voice and images make it better |
+| `06-3d-product` (Russian) | Blender |
+| `07-en-bakery` (English) | same as 01–05; an English brief gives an English video |
 
 ## How to use it
 
 ### As a skill, in a Claude Code session
+
+`make-video` is a project skill: it works when `claude` is started in this repository's root, and
+there is nothing to install into `~/.claude/skills`. You can also call it explicitly:
+`/make-video`.
 
 Run `claude` in the repository root and ask in plain words: "make a reel for a flower shop
 about five plant-care mistakes", "fix the ending of the last video". The
@@ -74,10 +122,14 @@ a job folder and starts the director in one of two modes.
   the director: it shows three directions to choose from, a contact sheet and the check
   results. This mode is also the handy way to revise a finished video.
 
+Claude Code asks for permission before terminal commands. Launching a video (`npm run make`) and
+`npm run doctor` are pre-approved in `.claude/settings.json`; approve the rest yourself (you can
+choose "always for this project"). While a question waits for an answer, the work stalls.
+
 ### One command
 
 ```bash
-npm run make -- --brief brief.md          # or --brief "brief text"
+npm run make -- --brief path/to/brief.md  # or --brief "brief text"
 ```
 
 | Flag | What it does |
@@ -88,18 +140,18 @@ npm run make -- --brief brief.md          # or --brief "brief text"
 | `--size 1080x1920`, `--fps 30` | format |
 | `--model`, `--effort` | director model and effort (default: Claude Code's default for your account; the director does not read your personal `~/.claude` settings) |
 | `--max-budget-usd 6` | hard cap for the whole run, at API prices |
-| `--resume` | continue an interrupted run in the same folder |
+| `--resume --slug name` | continue an interrupted run in `jobs/<name>/` |
 | `--dry-run` | only create the job folder |
 
 The job folder ends up with `out/final.mp4`, `notes.md` (the director's decisions, what was
 checked, "questions for the client"), `director.log` and `director.result.json` (time, turns,
 cost). If the director left major issues open, you get `out/candidate.mp4` with status
-`needs-stage-2` instead of `final.mp4`. Continue with `--resume`.
+`needs-stage-2` instead of `final.mp4`. Continue with `npm run make -- --resume --slug <folder name>`.
 
 ### By hand, or with Codex
 
 ```bash
-studio/bin/studio new cafe --brief brief.md
+studio/bin/studio new cafe --brief path/to/brief.md
 cd jobs/cafe && PATH="$PWD/../../studio/bin:$PATH" claude    # or codex
 ```
 
@@ -129,10 +181,15 @@ can do.
 
 ### Your own voice with ElevenLabs
 
+Voice cloning needs a paid ElevenLabs plan: Instant Voice Clone from Starter, Professional Voice
+Clone from Creator.
+
 1. In ElevenLabs open Voices → Add voice → Instant or Professional Voice Clone and record a
    sample of your voice.
 2. Copy the new voice's Voice ID.
-3. Put it in `.env`:
+3. Create an API key (Developers → API Keys) with the **Text to Speech** permission: new keys
+   have scoped permissions chosen at creation.
+4. Put it in `.env`:
 
 ```bash
 VOICE_PROVIDER=elevenlabs
@@ -143,10 +200,12 @@ ELEVENLABS_MODEL=eleven_multilingual_v2
 
 ElevenLabs returns word timings together with the audio, so captions don't need whisper.
 
-### Kimi-Audio, Piper or any model of your own (`command`)
+### Your own model: Piper, Silero, Kimi-Audio… (`command`)
 
 The studio runs your command and fills in the paths. The line's text is passed only as a file,
-so quotes and special characters can't break the command.
+and every placeholder becomes an already-quoted environment variable, so quotes and special
+characters can't break the command. **Don't put placeholders in quotes yourself**: write
+`say -v {voice}`, not `say -v "{voice}"` (`npm run doctor` will point it out).
 
 | Placeholder | Meaning |
 |---|---|
@@ -158,21 +217,27 @@ so quotes and special characters can't break the command.
 
 ```bash
 VOICE_PROVIDER=command
-VOICE_COMMAND=python3 ~/tts/kimi_tts.py --text-file {text_file} --out {out_wav}
-# Piper:   VOICE_COMMAND=piper --model ~/piper/en_US-amy-medium.onnx --output_file {out_wav} < {text_file}
-# macOS:   VOICE_COMMAND=say -v Samantha -f {text_file} -o {out_wav} --data-format=LEI16@22050
+# macOS, free:    VOICE_COMMAND=say -v Samantha -f {text_file} -o {out_wav} --data-format=LEI16@22050
+# Piper:          VOICE_COMMAND=piper --model ~/piper/en_US-amy-medium.onnx --output_file {out_wav} < {text_file}
+# your server:    VOICE_COMMAND=curl -sf -X POST http://localhost:8020/tts --data-binary @{text_file} -o {out_wav}
+# your wrapper:   VOICE_COMMAND=python3 ~/tts/my_tts.py --text-file {text_file} --out {out_wav}
 ```
 
-A wrapper for Kimi-Audio or any other model is an ordinary script: read the text from
-`--text-file`, synthesize speech with your model, write a wav to `--out`. Roughly:
+On a Mac without an NVIDIA GPU, `say`, Piper, Silero and F5-TTS (MLX build) work well.
+Kimi-Audio and other large models expect an NVIDIA GPU: run them on a separate server and call
+it with `curl`, as above.
+
+A wrapper for your own model is an ordinary script: read the text from `--text-file`,
+synthesize speech, write a wav to `--out`. Below is **a template, not a working program**: you
+write `synthesize()` for your model.
 
 ```python
-# ~/tts/kimi_tts.py: wrapper template, replace synthesize() with your model call
+# ~/tts/my_tts.py: wrapper template — replace synthesize() with your model call
 import argparse, soundfile as sf
 p = argparse.ArgumentParser(); p.add_argument("--text-file"); p.add_argument("--out")
 a = p.parse_args()
 text = open(a.text_file, encoding="utf-8").read()
-audio, sr = synthesize(text)      # your model: Kimi-Audio, XTTS, F5-TTS, Silero…
+audio, sr = synthesize(text)      # yours to write: Silero, XTTS, F5-TTS, Kimi-Audio…
 sf.write(a.out, audio, sr)
 ```
 
@@ -214,9 +279,14 @@ brief → doctor (what's connected) → brief facts → three concepts → style
 ## Cost and time
 
 - **Director:** one video is roughly **$2–4** at API prices and **10–20 minutes** on an Apple
-  Silicon Mac (from our runs). On a Claude subscription this uses your plan's usage limit rather
-  than a separate bill. On Pro a usage window may cover one or two videos; Max is more
-  comfortable for regular work. `--max-budget-usd` (default 6) caps a run.
+  Silicon Mac. That's a ballpark from our runs, not a promise: it depends on the director model
+  (Opus costs noticeably more than Sonnet), the brief and the number of revisions. On a Claude
+  subscription this uses your plan's usage limit rather than a separate bill. How many videos fit
+  in a Pro usage window is hard to predict (our rough guess: one or two); Max is more comfortable
+  for regular work.
+- **Cap:** `--max-budget-usd` (default 6) caps a run. When it's reached, Claude Code stops the
+  director; the work so far stays in the job folder, and
+  `npm run make -- --resume --slug <folder name>` continues it (with a fresh cap).
 - **Heads-up:** if `ANTHROPIC_API_KEY` is set in your environment, Claude Code bills the API
   account instead of your subscription. The launcher warns about it.
 - **Voice and images** are billed to your own keys at the providers' prices. A typical video
@@ -238,12 +308,13 @@ brief → doctor (what's connected) → brief facts → three concepts → style
   (WSL2 may work).
 - The one-command launcher is built for Claude Code. With Codex and other agents, a video is
   made in an interactive session following `AGENTS.md`.
-- The first render downloads Chrome Headless Shell for Remotion. `npm run setup` does this
-  ahead of time.
+- Rendering needs internet access: Google Fonts are fetched at render time. The first render
+  also downloads Chrome Headless Shell for Remotion (`npm run setup` does this ahead of time).
 
 ## Licensing
 
-- **Studio code: MIT** ([`LICENSE`](LICENSE)). Fill in your own copyright line.
+- **Studio code: MIT** ([`LICENSE`](LICENSE)). When you copy or fork it, keep the `LICENSE` file
+  with its original copyright line; you can credit your own changes separately.
 - **Remotion has its own license, not MIT.** It is free for individuals, non-profits and
   companies of **up to 3 people**. Larger companies need a paid company license:
   <https://www.remotion.dev/license>.
@@ -256,12 +327,42 @@ brief → doctor (what's connected) → brief facts → three concepts → style
 
 The full list of third-party components is in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
-## Safety and responsibility
+## Security
 
-- The repository contains no keys and no third-party data. Your keys live only in `.env`, which
-  stays out of git. Studio tools read it themselves and never print keys. The director doesn't
-  receive the keys, and the launch rules forbid it from reading `.env`.
-- Job folders (`jobs/`) and the cache (`.cache/`) are git-ignored too.
+The director is Claude Code with terminal access. **It acts with your macOS or Linux user's
+rights**: it can run commands, read your files and reach the network. That's how the studio
+works: the director writes and runs scenes, Blender scripts and checks itself.
+
+What the studio does to reduce the risk:
+
+- Provider keys live only in `.env` (git-ignored). The studio tools (`studio voice`,
+  `studio image`) read it and never print keys: error output masks the values of every variable
+  with `KEY`, `TOKEN`, `SECRET`, `PASS` or `AUTH` in its name, plus common key formats.
+- A director started by `npm run make` (and in Solo mode) gets no keys in its environment —
+  neither from `.env` nor from your shell (`OPENAI_API_KEY`, `*_TOKEN` etc. from `~/.zshrc`).
+  Only the Claude Code sign-in is kept. In Together mode the director is your own `claude`
+  session with your own environment.
+- The Read/Edit/Write tools are denied `.env` and the `studio/` folder (guide, skills, tools);
+  git is unavailable. The tool set is trimmed, and MCP servers and your personal `~/.claude`
+  settings are not loaded.
+- Studio tools read and write files only inside the job folder: a prompt file, reference image
+  or lines file from elsewhere never reaches a provider. No value can turn a `VOICE_COMMAND` /
+  `IMAGE_COMMAND` placeholder into a command.
+- `--brand` copies only images and `brand.json`, skipping symlinks and hidden files.
+
+What this does **not** give you: full isolation. Through the terminal the director can
+technically still `cat .env`. So:
+
+- keep only the studio's provider keys in `.env` and set a spending limit in each provider's
+  dashboard;
+- briefs, client materials and images from strangers can carry text aimed at the AI ("prompt
+  injection"). Make such videos under a separate macOS user, in a virtual machine or in a
+  container that has none of your personal files or keys.
+
+### Responsibility
+
+- The repository contains no keys and no third-party data. Job folders (`jobs/`) and the cache
+  (`.cache/`) are git-ignored.
 - You are responsible for the content and publication of your videos. The director doesn't
   invent numbers or promises and lists its assumptions as "questions for the client", but
   checking them is up to you.
@@ -284,7 +385,7 @@ studio/template/             job folder template
 studio/make.ts               headless director launcher (npm run make)
 scripts/setup.mjs            npm run setup
 public/sfx, public/music     CC0 sound effects and music
-examples/briefs/             example briefs (in Russian; any language works for a brief)
+examples/briefs/             example briefs (01–06 in Russian, 07 in English; any language works)
 tests/                       studio tests (npm test)
 ```
 

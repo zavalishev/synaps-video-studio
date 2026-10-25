@@ -1,5 +1,5 @@
 // Создание папки ролика jobs/<slug> из studio/template (общая часть new.ts и make.ts).
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { extname, join, relative } from "node:path";
 import { ROOT, STUDIO } from "./_lib";
 
@@ -26,10 +26,33 @@ export const linkSkills = (dir: string) => {
 // job.json.brand с путями для staticFile. Фото заказчика — настоящий товар/место: их берут
 // героями (вырезка, PhotoLayers, --ref), генерация — только недостающего.
 const IMG = new Set([".png", ".jpg", ".jpeg", ".webp", ".svg"]);
+const BRAND_MAX_BYTES = 25 * 1024 * 1024;
+// Копируются только картинки (корень, photos/, refs/) и brand.json: без ссылок (могут вести
+// наружу), скрытых файлов и файлов больше 25 МБ — пропущенное печатается.
+const copyBrandDir = (src: string, dst: string, depth: number, skipped: string[]) => {
+  mkdirSync(dst, { recursive: true });
+  for (const name of readdirSync(src)) {
+    const from = join(src, name);
+    const st = lstatSync(from);
+    if (name.startsWith(".") || st.isSymbolicLink()) { skipped.push(`${from} (скрытый файл или ссылка)`); continue; }
+    if (st.isDirectory()) {
+      if (depth === 0 && (name === "photos" || name === "refs")) copyBrandDir(from, join(dst, name), 1, skipped);
+      else skipped.push(`${from}/ (папка не из photos/, refs/)`);
+      continue;
+    }
+    if (!st.isFile()) continue;
+    const ok = IMG.has(extname(name).toLowerCase()) || (depth === 0 && name === "brand.json");
+    if (!ok) { skipped.push(`${from} (не картинка)`); continue; }
+    if (st.size > BRAND_MAX_BYTES) { skipped.push(`${from} (больше 25 МБ)`); continue; }
+    copyFileSync(from, join(dst, name));
+  }
+};
 export const importBrand = (dir: string, src: string) => {
   if (!existsSync(src) || !statSync(src).isDirectory()) throw new Error(`--brand: нет папки ${src}`);
   const dst = join(dir, "public", "brand");
-  cpSync(src, dst, { recursive: true });
+  const skipped: string[] = [];
+  copyBrandDir(src, dst, 0, skipped);
+  if (skipped.length) console.error(`--brand: пропущено ${skipped.length}: ${skipped.slice(0, 8).join("; ")}${skipped.length > 8 ? " …" : ""}`);
   const list = (sub: string) => existsSync(join(dst, sub)) ? readdirSync(join(dst, sub)).filter((f) => IMG.has(extname(f).toLowerCase())).sort().map((f) => `brand/${sub}/${f}`) : [];
   const logo = readdirSync(dst).find((f) => /^logo\./i.test(f) && IMG.has(extname(f).toLowerCase()));
   let extra: Record<string, unknown> = {};

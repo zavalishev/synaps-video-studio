@@ -26,7 +26,7 @@ import { join } from "node:path";
 import { cacheDir, ff, ffprobeDuration, sha } from "./_media";
 import { asrPlan, OPENAI_VOICES, retime, transcribeOpenAI, tts, voiceConfig, whisperLocal, type TimedWord } from "./_providers";
 import { whisperBin, whisperModel } from "./_tools";
-import { die, inJob, jobDir, num, parseArgs, readJob, str } from "./_lib";
+import { die, inJobStrict, jobDir, num, parseArgs, readJob, str } from "./_lib";
 
 type LineIn = string | { id?: string; say: string; voice?: string; style?: string; pace?: number; before?: number; after?: number };
 type Spec = { voice?: string; style?: string; pace?: number; gap?: number; lang?: string; lines: LineIn[] };
@@ -35,7 +35,7 @@ type Word = TimedWord;
 const a = parseArgs(process.argv.slice(2), ["keep-duration", "estimate"]);
 const dir = jobDir(a);
 const file = a._[0] ?? die("нужен файл реплик: studio voice lines.json");
-const raw = JSON.parse(readFileSync(inJob(dir, file), "utf8"));
+const raw = JSON.parse(readFileSync(inJobStrict(dir, file, "файл реплик"), "utf8"));
 const spec: Spec = Array.isArray(raw) ? { lines: raw } : raw;
 if (!spec.lines?.length) die("в файле нет реплик");
 
@@ -190,7 +190,7 @@ const main = async () => {
     if (after > 0) { parts.push(silence(after)); t += after; }
   }
 
-  const outWav = inJob(dir, join("public", OUT));
+  const outWav = inJobStrict(dir, join("public", OUT), "--out");
   const list = outWav.replace(/\.wav$/, ".concat.txt");
   writeFileSync(list, parts.map((p) => `file '${p.replace(/'/g, `'\\''`)}'`).join("\n"));
   ff(["-f", "concat", "-safe", "0", "-i", list, "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-ar", "48000", "-c:a", "pcm_s16le", outWav]);
@@ -202,7 +202,7 @@ const main = async () => {
   }));
   const timing = [...used].join(" + ");
   const wordsFile = OUT.replace(/\.wav$/, "") === "voice" ? "words.json" : OUT.replace(/\.wav$/, ".words.json");
-  writeFileSync(inJob(dir, join("public", wordsFile)), JSON.stringify({ audio: OUT, total, lang: LANG, timing, lines, words, captions }, null, 1));
+  writeFileSync(inJobStrict(dir, join("public", wordsFile), "тайминги"), JSON.stringify({ audio: OUT, total, lang: LANG, timing, lines, words, captions }, null, 1));
 
   if (!a["keep-duration"]) {
     const job = readJob(dir) as unknown as Record<string, unknown>;

@@ -38,24 +38,69 @@ Google Gemini или любую свою программу, например Ki
 
 ## Быстрый старт
 
-Нужны macOS (основная платформа) или Linux, Node 22+ (проверено на 24), ffmpeg и
-[Claude Code](https://claude.com/claude-code) с подпиской Claude Pro или Max.
+Нужны macOS (основная платформа) или Linux, Node 22+ (проверено на 24, есть `.nvmrc`), ffmpeg,
+[Claude Code](https://claude.com/claude-code) с подпиской Claude Pro или Max и интернет (рендер
+подгружает шрифты Google Fonts). На Mac сначала поставьте [Homebrew](https://brew.sh), если его
+ещё нет: он заодно поставит Xcode Command Line Tools, без которых не работает `git`.
 
 ```bash
-brew install node ffmpeg                       # 1. Linux: nodejs 22+ и ffmpeg из своего менеджера пакетов
-git clone https://github.com/<owner>/ai-video-studio && cd ai-video-studio   # 2.
-npm run setup                                  # 3. пакеты, проверка программ, .env, модель whisper, doctor
-claude                                         # 4. войдите своей подпиской и скажите: «сделай ролик по examples/briefs/01-coffee-promo.md»
-npm run make -- --brief examples/briefs/05-event.md   # 5. или целиком без окна: итог в jobs/<slug>/out/final.mp4
+# 1. Программы (Linux — см. ниже)
+brew install node ffmpeg
+curl -fsSL https://claude.ai/install.sh | bash   # Claude Code; ставится в ~/.local/bin — добавьте в PATH, если claude не находится
+
+# 2. Студия
+git clone https://github.com/<owner>/ai-video-studio && cd ai-video-studio
+npm run setup                                    # пакеты, проверка программ, .env, модель whisper, doctor
+
+# 3. Один раз войдите в Claude Code своей подпиской
+claude                                           # внутри: /login
 ```
 
-По желанию: `brew install --cask blender` для 3D-ассетов, `brew install whisper-cpp` для точных
-таймингов слов в субтитрах. `npm run setup` предложит скачать модель whisper (около 0,5 ГБ,
-бесплатно).
+Дальше одно из двух:
+
+- **4а. В сессии.** В той же сессии `claude` (запущенной в корне репозитория) скажите: «сделай
+  ролик по examples/briefs/01-coffee-promo.md».
+- **4б. Без окна.** `npm run make -- --brief examples/briefs/05-event.md`
+
+Прогон идёт 10–20 минут и печатает ход работы; не прерывайте его (прерванный продолжается через
+`--resume`, см. ниже). В конце печатается JSON: путь к ролику — в поле `final`, обычно
+`jobs/<имя>/out/final.mp4`, где имя папки берётся из заголовка брифа.
+
+**Голос бесплатно на Mac.** Ключей нет — для первого ролика хватит встроенного синтезатора
+macOS. Впишите в `.env`:
+
+```bash
+VOICE_PROVIDER=command
+VOICE_COMMAND=say -v Milena -f {text_file} -o {out_wav} --data-format=LEI16@22050
+```
+
+Голос Milena может понадобиться скачать: Системные настройки → Универсальный доступ → Устный
+контент → Системный голос → Управлять голосами. Проверка — `npm run doctor`.
+
+**По желанию:** `brew install --cask blender` для 3D-ассетов (проверено на Blender 5.2; старые
+версии могут не работать), `brew install whisper-cpp` для точных таймингов слов в субтитрах.
+`npm run setup` предложит скачать модель whisper (около 0,5 ГБ, бесплатно, с проверкой SHA-256).
+
+**Linux.** Node 24 — через [nvm](https://github.com/nvm-sh/nvm) (`nvm install 24`) или NodeSource:
+в apt обычно лежит Node 18 или 20, этого мало. ffmpeg — `sudo apt install ffmpeg`. Для Chrome
+Headless Shell, которым рендерит Remotion, нужны системные библиотеки:
+<https://www.remotion.dev/docs/miscellaneous/linux-dependencies>. Blender — `sudo snap install
+blender --classic`.
+
+### Примеры брифов
+
+| Пример | Что нужно |
+|---|---|
+| `01-coffee-promo` … `05-event` | ничего обязательного; голос и картинки делают ролик лучше |
+| `06-3d-product` | Blender |
+| `07-en-bakery` | то же, что 01–05; бриф на английском — ролик тоже на английском |
 
 ## Как работать
 
 ### Как скилл, в сессии Claude Code
+
+`make-video` — скилл проекта: он работает, когда `claude` запущен в корне этого репозитория,
+ставить его в `~/.claude/skills` не нужно. Его можно вызвать и явно: `/make-video`.
 
 Запустите `claude` в корне репозитория и попросите обычными словами: «сделай рилс для
 цветочного магазина про пять ошибок в уходе», «поправь финал в последнем ролике». Сработает
@@ -69,10 +114,14 @@ npm run make -- --brief examples/briefs/05-event.md   # 5. или целиком
   сессия: показывает три направления на выбор, лист кадров, итог проверок. В этом же режиме
   удобно править готовый ролик.
 
+Claude Code спрашивает разрешение перед командами в терминале. Запуск ролика (`npm run make`) и
+`npm run doctor` уже разрешены в `.claude/settings.json`; остальное одобрите сами (можно «всегда
+для этого проекта»). Пока вопрос висит без ответа, работа стоит.
+
 ### Одной командой
 
 ```bash
-npm run make -- --brief brief.md          # или --brief "текст брифа"
+npm run make -- --brief путь/к/брифу.md    # или --brief "текст брифа"
 ```
 
 | Флаг | Что делает |
@@ -83,18 +132,18 @@ npm run make -- --brief brief.md          # или --brief "текст бриф�
 | `--size 1080x1920`, `--fps 30` | формат |
 | `--model`, `--effort` | модель и усилие режиссёра (по умолчанию модель Claude Code для вашего аккаунта; личные настройки из `~/.claude` режиссёр не читает) |
 | `--max-budget-usd 6` | жёсткий потолок на весь прогон в пересчёте на цены API |
-| `--resume` | продолжить прерванный прогон в той же папке |
+| `--resume --slug имя` | продолжить прерванный прогон в папке `jobs/<имя>/` |
 | `--dry-run` | только создать папку ролика |
 
 В папке ролика остаются `out/final.mp4`, `notes.md` (решения режиссёра, что проверено, «Вопросы
 заказчику»), `director.log` и `director.result.json` (время, ходы, стоимость). Если режиссёр не
 закрыл важные замечания, вместо `final.mp4` будет `out/candidate.mp4` со статусом
-`needs-stage-2`. Продолжить можно через `--resume`.
+`needs-stage-2`. Продолжить можно через `npm run make -- --resume --slug <имя папки>`.
 
 ### Вручную или с Codex
 
 ```bash
-studio/bin/studio new kofeinya --brief brief.md
+studio/bin/studio new kofeinya --brief путь/к/брифу.md
 cd jobs/kofeinya && PATH="$PWD/../../studio/bin:$PATH" claude    # или codex
 ```
 
@@ -124,10 +173,15 @@ cd jobs/kofeinya && PATH="$PWD/../../studio/bin:$PATH" claude    # или codex
 
 ### Свой голос в ElevenLabs
 
+Клонирование голоса есть только на платных планах ElevenLabs: Instant Voice Clone — от Starter,
+Professional Voice Clone — от Creator.
+
 1. В ElevenLabs откройте Voices → Add voice → Instant или Professional Voice Clone и запишите
    образец своего голоса.
 2. Скопируйте Voice ID нового голоса.
-3. Впишите в `.env`:
+3. Создайте API-ключ (Developers → API Keys) с правом **Text to Speech**: у новых ключей права
+   выбираются при создании.
+4. Впишите в `.env`:
 
 ```bash
 VOICE_PROVIDER=elevenlabs
@@ -138,10 +192,12 @@ ELEVENLABS_MODEL=eleven_multilingual_v2
 
 Тайминги слов ElevenLabs отдаёт вместе с аудио, whisper для субтитров не нужен.
 
-### Kimi-Audio, Piper или любая своя модель (`command`)
+### Своя модель: Piper, Silero, Kimi-Audio… (`command`)
 
 Студия вызывает вашу команду и подставляет в неё пути. Текст реплики передаётся только файлом,
-поэтому кавычки и спецсимволы не ломают команду.
+а каждая подстановка становится уже закавыченной переменной окружения, поэтому кавычки и
+спецсимволы не ломают команду. **Сами подстановки в кавычки не берите**: `say -v {voice}`, а не
+`say -v "{voice}"` (`npm run doctor` подскажет).
 
 | Подстановка | Что это |
 |---|---|
@@ -153,21 +209,27 @@ ELEVENLABS_MODEL=eleven_multilingual_v2
 
 ```bash
 VOICE_PROVIDER=command
-VOICE_COMMAND=python3 ~/tts/kimi_tts.py --text-file {text_file} --out {out_wav}
-# Piper:   VOICE_COMMAND=piper --model ~/piper/ru_RU-irina-medium.onnx --output_file {out_wav} < {text_file}
-# macOS:   VOICE_COMMAND=say -v Milena -f {text_file} -o {out_wav} --data-format=LEI16@22050
+# macOS, бесплатно:  VOICE_COMMAND=say -v Milena -f {text_file} -o {out_wav} --data-format=LEI16@22050
+# Piper:             VOICE_COMMAND=piper --model ~/piper/ru_RU-irina-medium.onnx --output_file {out_wav} < {text_file}
+# свой сервер:       VOICE_COMMAND=curl -sf -X POST http://localhost:8020/tts --data-binary @{text_file} -o {out_wav}
+# своя обёртка:      VOICE_COMMAND=python3 ~/tts/my_tts.py --text-file {text_file} --out {out_wav}
 ```
 
-Обёртка для Kimi-Audio или другой модели — это обычный скрипт: прочитать текст из
-`--text-file`, синтезировать речь своей моделью, записать wav в `--out`. Примерно так:
+На Mac без видеокарты NVIDIA хорошо работают `say`, Piper, Silero и F5-TTS (сборка под MLX).
+Kimi-Audio и другие крупные модели рассчитаны на видеокарту NVIDIA: их удобнее поднять на
+отдельном сервере и звать через `curl`, как в примере выше.
+
+Обёртка для своей модели — обычный скрипт: прочитать текст из `--text-file`, синтезировать речь,
+записать wav в `--out`. Ниже **шаблон, а не готовая программа**: функцию `synthesize()` нужно
+написать под вашу модель.
 
 ```python
-# ~/tts/kimi_tts.py: шаблон обёртки, синтез замените вызовом своей модели
+# ~/tts/my_tts.py: шаблон обёртки — synthesize() замените вызовом своей модели
 import argparse, soundfile as sf
 p = argparse.ArgumentParser(); p.add_argument("--text-file"); p.add_argument("--out")
 a = p.parse_args()
 text = open(a.text_file, encoding="utf-8").read()
-audio, sr = synthesize(text)      # ваша модель: Kimi-Audio, XTTS, F5-TTS, Silero…
+audio, sr = synthesize(text)      # написать самим: Silero, XTTS, F5-TTS, Kimi-Audio…
 sf.write(a.out, audio, sr)
 ```
 
@@ -209,9 +271,13 @@ sf.write(a.out, audio, sr)
 ## Сколько стоит и сколько ждать
 
 - **Режиссёр:** один ролик — примерно **$2–4** в пересчёте на цены API и **10–20 минут** на Mac
-  с Apple Silicon (по нашим прогонам). На подписке Claude это расход лимита использования, а не
-  отдельный счёт. На Pro лимита окна может хватить на один–два ролика, для регулярной работы
-  удобнее Max. Потолок прогона задаёт `--max-budget-usd` (по умолчанию 6).
+  с Apple Silicon. Это ориентир по нашим прогонам, а не гарантия: цифры зависят от модели
+  режиссёра (Opus заметно дороже Sonnet), брифа и числа правок. На подписке Claude это расход лимита использования, а не
+  отдельный счёт. Сколько роликов войдёт в окно лимита на Pro, оценить заранее трудно (по нашей
+  прикидке — один–два); для регулярной работы удобнее Max.
+- **Потолок** прогона задаёт `--max-budget-usd` (по умолчанию 6). Дойдя до него, Claude Code
+  останавливает режиссёра; сделанное остаётся в папке ролика, продолжить можно через
+  `npm run make -- --resume --slug <имя папки>` (у продолжения свой потолок).
 - **Внимание:** если в окружении задан `ANTHROPIC_API_KEY`, Claude Code списывает работу с
   API-счёта, а не с подписки. Запуск предупредит об этом.
 - **Голос и картинки** оплачиваются вашими ключами по тарифам провайдеров. Обычно это до 12
@@ -232,12 +298,13 @@ sf.write(a.out, audio, sr)
   поддерживается (можно попробовать WSL2).
 - Запуск одной командой рассчитан на Claude Code. С Codex и другими агентами ролик делается в
   интерактивной сессии по `AGENTS.md`.
-- Первый рендер скачивает Chrome Headless Shell для Remotion. `npm run setup` делает это
-  заранее.
+- Рендеру нужен интернет: шрифты Google Fonts подгружаются при рендере. Первый рендер ещё и
+  скачивает Chrome Headless Shell для Remotion (`npm run setup` делает это заранее).
 
 ## Лицензии
 
-- **Код студии — MIT** ([`LICENSE`](LICENSE)). Строку copyright впишите свою.
+- **Код студии — MIT** ([`LICENSE`](LICENSE)). При копировании и форках сохраняйте файл
+  `LICENSE` с исходной строкой copyright; свои изменения можно подписать отдельно.
 - **Remotion — собственная лицензия, не MIT.** Бесплатно для физических лиц, некоммерческих
   организаций и компаний **до 3 человек**. Компаниям крупнее нужна платная лицензия компании:
   <https://www.remotion.dev/license>.
@@ -250,12 +317,41 @@ sf.write(a.out, audio, sr)
 
 Полный список сторонних компонентов — в [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
-## Безопасность и ответственность
+## Безопасность
 
-- В репозитории нет ключей и чужих данных. Ваши ключи живут только в `.env`, который не попадает
-  в git. Инструменты студии читают его сами и никогда не печатают ключи. Режиссёру ключи не
-  передаются, а читать `.env` ему запрещено правилами запуска.
-- Ролики (`jobs/`) и кэш (`.cache/`) тоже в `.gitignore`.
+Режиссёр — это Claude Code с доступом к терминалу. **Он действует с правами вашего пользователя
+macOS или Linux**: может запускать команды, читать ваши файлы и ходить в сеть. Так устроена
+студия: сцены, скрипты Blender и проверки режиссёр пишет и запускает сам.
+
+Что студия делает, чтобы снизить риск:
+
+- Ключи провайдеров живут только в `.env` (он в `.gitignore`). Их читают инструменты студии
+  (`studio voice`, `studio image`) и никогда не печатают: в выводе ошибок маскируются значения
+  всех переменных с `KEY`, `TOKEN`, `SECRET`, `PASS`, `AUTH` в имени и типовые форматы ключей.
+- В окружение режиссёра, запущенного через `npm run make` (и в режиме «Сам»), ключи не
+  передаются — ни из `.env`, ни из окружения оболочки (`OPENAI_API_KEY`, `*_TOKEN` и т.п. из
+  `~/.zshrc`). Остаётся только вход в сам Claude Code. В режиме «Вместе» режиссёр — ваша
+  собственная сессия `claude` с вашим окружением.
+- Инструментам Read/Edit/Write запрещены `.env` и папка `studio/` (руководство, скиллы,
+  инструменты), git недоступен. Набор инструментов урезан, MCP-серверы и ваши личные настройки
+  из `~/.claude` не подключаются.
+- Инструменты студии берут и пишут файлы только внутри папки ролика: промпт-файл, референсы
+  и реплики из другого места провайдеру не уйдут. Подстановки в `VOICE_COMMAND`/`IMAGE_COMMAND`
+  не может превратить в команду никакое значение.
+- `--brand` копирует только картинки и `brand.json`, без ссылок и скрытых файлов.
+
+Чего это **не** даёт: полной изоляции. Через терминал режиссёр технически может прочитать `.env`
+командой `cat`. Поэтому:
+
+- держите в `.env` только ключи провайдеров студии и поставьте лимит расходов в кабинете
+  каждого провайдера;
+- брифы, материалы заказчика и картинки от незнакомых людей могут содержать текст-инструкцию
+  для ИИ («prompt injection»). Такие ролики делайте под отдельным пользователем macOS, в
+  виртуальной машине или в контейнере, где нет ваших личных файлов и ключей.
+
+### Ответственность
+
+- В репозитории нет ключей и чужих данных. Ролики (`jobs/`) и кэш (`.cache/`) в `.gitignore`.
 - За содержание и публикацию ролика отвечаете вы. Режиссёр не выдумывает цифры и обещания и
   выносит допущения в «Вопросы заказчику», но проверять их нужно вам.
 - Клонируйте только свой голос или голос человека, давшего на это согласие. Чужие логотипы,

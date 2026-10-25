@@ -1,7 +1,16 @@
 {
   "permissions": {
+    "allow": [
+      "Bash(studio/bin/studio doctor)",
+      "Bash(npm run doctor)",
+      "Bash(npm run make:*)",
+      "Bash(npm run -s make:*)"
+    ],
     "deny": [
-      "Read(./.env)"
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Edit(./.env*)",
+      "Write(./.env*)"
     ]
   }
 }

@@ -52,7 +52,7 @@ export const contains = (outer: Rect, inner: Rect): boolean =>
 export const center = (r: Rect): Point => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
 
 // ---------- ТЕКСТ ----------
-// Ширины символов — из самих файлов шрифтов (scripts/font-metrics.ts), поэтому node меряет
+// Ширины символов сняты с самих файлов шрифтов (data/fontMetrics.json), поэтому node меряет
 // так же, как браузер рисует. Кернинг не учитывается (для моноширинного шрифта это точно).
 type FaceMetrics = { upm: number; asc: number; desc: number; missing: number; adv: Record<string, number> };
 const FACES_RAW = FONT_METRICS.faces as Record<string, FaceMetrics>;

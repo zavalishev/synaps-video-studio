@@ -4,7 +4,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import sharp from "sharp";
+import sharp, { type OverlayOptions } from "sharp";
 import { dominantColors, layoutOf, lookCell, type Layout } from "../lib/art-direction/looks";
 import { readRegistry, registryId, voiceOf } from "./_registry";
 import { ROOT } from "./_lib";
@@ -79,7 +79,7 @@ export const renderRecentLooks = async (looks: Look[], out: string, o: { anonymo
   const cols = tiles.length + (o.mine ? 1 : 0);
   if (!cols) return null;
   const W = cols * (TW + GAP) + GAP, H = LAB + TH + SW + GAP * 2;
-  const parts: sharp.OverlayOptions[] = [];
+  const parts: OverlayOptions[] = [];
   const tile = async (l: { bg?: string; ink?: string; accent?: string }, frame: string | null, label: string, x: number) => {
     const bg = l.bg ?? "#777", ink = l.ink ?? "#111", ac = l.accent ?? "#999";
     const lab = Buffer.from(`<svg width="${TW}" height="${LAB}" xmlns="http://www.w3.org/2000/svg"><text x="4" y="24" font-family="Helvetica" font-size="18" fill="#eee">${esc(label)}</text></svg>`);

@@ -15,6 +15,7 @@ typeface.json, честная фаска, проверка глифов. В thre
 """
 import os
 import re
+import urllib.parse
 import urllib.request
 
 import bmesh
@@ -34,15 +35,19 @@ def font_file(family, weight=700, italic=False):
     if os.path.isfile(family):
         return family
     os.makedirs(FONT_CACHE, exist_ok=True)
-    tag = f"{family.replace(' ', '')}-{weight}{'i' if italic else ''}.ttf"
+    weight = int(weight)
+    safe = re.sub(r"[^A-Za-z0-9_-]", "", family)
+    if not safe:
+        raise ValueError(f"text3d: странное имя шрифта {family!r}")
+    tag = f"{safe}-{weight}{'i' if italic else ''}.ttf"
     path = os.path.join(FONT_CACHE, tag)
     if os.path.isfile(path) and os.path.getsize(path) > 1000:
         return path
-    fam = family.replace(" ", "+")
+    fam = urllib.parse.quote(family, safe=" ").replace(" ", "+")
     axis = f"ital,wght@1,{weight}" if italic else f"wght@{weight}"
     url = f"https://fonts.googleapis.com/css2?family={fam}:{axis}"
     css = urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Mozilla/4.0"}), timeout=30).read().decode()
-    m = re.search(r"url\((https://[^)]+\.ttf)\)", css)
+    m = re.search(r"url\((https://fonts\.gstatic\.com/[^)]+\.ttf)\)", css)
     if not m:
         raise RuntimeError(f"text3d: нет TTF для {family} {weight} (ответ: {css[:200]})")
     data = urllib.request.urlopen(m.group(1), timeout=60).read()

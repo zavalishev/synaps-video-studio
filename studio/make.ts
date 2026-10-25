@@ -37,7 +37,7 @@ import { clientQuestions } from "./skills/claims-and-compliance/facts";
 import { join } from "node:path";
 import { createJob, JOBS, linkSkills, slugify } from "./bin/_job";
 import { die, num, parseArgs, ROOT, STUDIO, str } from "./bin/_lib";
-import { directorEnv, DOTENV_KEYS, ENV_FILE } from "./bin/_env";
+import { directorEnv, DOTENV_KEYS, ENV_FILE, shellSecrets } from "./bin/_env";
 import { imageConfig, voiceConfig } from "./bin/_providers";
 import { claudeBin } from "./bin/_tools";
 
@@ -114,7 +114,13 @@ const argsFor = (prompt: string, o: { model?: string; effort?: string; maxUsd: n
   "--setting-sources", "project,local",
   "--strict-mcp-config",
   // .env с ключами провайдеров директору не нужен: инструменты студии читают его сами.
-  "--disallowedTools", "Bash(git:*)", "Bash(git *)", `Read(/${ENV_FILE})`,
+  // Это запрет инструментов Read/Edit/Write, а не песочница: Bash остаётся с правами пользователя
+  // (см. README «Безопасность»). Студию (studio/: руководство, скиллы, инструменты) директор
+  // не правит — иначе одна неудачная или подсказанная брифом правка ушла бы во все следующие ролики.
+  "--disallowedTools", "Bash(git:*)", "Bash(git *)",
+  `Read(/${ENV_FILE})`, `Edit(/${ENV_FILE})`, `Write(/${ENV_FILE})`,
+  `Read(/${join(ROOT, ".env")}.*)`, `Edit(/${join(ROOT, ".env")}*)`, `Write(/${join(ROOT, ".env")}*)`,
+  `Edit(/${STUDIO}/**)`, `Write(/${STUDIO}/**)`,
   "--add-dir", STUDIO,
   ...(o.model ? ["--model", o.model] : []),
   ...(o.effort ? ["--effort", o.effort] : []),
@@ -125,8 +131,10 @@ const log = join(dir, "director.log");
 // Ключи из .env в окружение сессии Claude не передаются (их перечитают инструменты студии).
 // … и переменные родительской сессии Claude Code тоже (directorEnv в _env.ts).
 const baseEnv = directorEnv(process.env, DOTENV_KEYS);
+const fromShell = shellSecrets(process.env, DOTENV_KEYS);
+if (fromShell.length) console.error(`внимание: ${fromShell.join(", ")} заданы в окружении оболочки (например, в ~/.zshrc). В окружение директора они не передаются (одна команда env — и ключ в контексте модели и в director.log), поэтому инструменты студии внутри прогона возьмут ключи только из .env — перенесите их туда, если их там нет.`);
 if (baseEnv.ANTHROPIC_API_KEY?.trim()) console.error("внимание: в окружении задан ANTHROPIC_API_KEY — Claude Code спишет работу директора с API-счёта, а не с подписки. Нужна подписка — запустите без него (env -u ANTHROPIC_API_KEY npm run make -- …).");
-const env = { ...baseEnv, PATH: `${join(STUDIO, "bin")}:${process.env.PATH}`, STUDIO_JOB: dir, STUDIO_ROOT: ROOT, STUDIO_BUDGET_USD: String(BUDGET_USD), STUDIO_BUDGET_MIN: String(BUDGET_MIN) };
+const env = { ...baseEnv, PATH: `${join(STUDIO, "bin")}:${process.env.PATH}`, STUDIO_JOB: dir, STUDIO_BUDGET_USD: String(BUDGET_USD), STUDIO_BUDGET_MIN: String(BUDGET_MIN) };
 const t0 = Date.now();
 const limitMin = num(a, "timeout-min", 90)!;
 

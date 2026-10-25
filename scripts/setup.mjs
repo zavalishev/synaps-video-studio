@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 // Первая настройка студии: npm run setup [-- --yes] [-- --no-whisper] [-- --no-browser] [-- --skip-install]
-//   1) Node ≥ 22; 2) npm install; 3) ffmpeg, Claude Code, Blender, whisper.cpp — есть ли и как поставить;
+//   1) Node ≥ 22; 2) npm ci (точные версии из package-lock.json); 3) ffmpeg, Claude Code, Blender, whisper.cpp — есть ли и как поставить;
 //   4) .env из .env.example (если ещё нет); 5) по желанию скачать модель whisper.cpp (бесплатно, ≈ 0,5 ГБ);
 //   6) браузер для рендера Remotion (Chrome Headless Shell, бесплатно); 7) studio doctor.
 // Ничего платного не вызывает и ключей не печатает. Plain Node, no dependencies (runs before npm install).
 // First-time setup. Free, no paid API calls, never prints keys.
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -56,11 +57,12 @@ const major = Number(process.versions.node.split(".")[0]);
 if (major >= 22) ok(`Node ${process.versions.node}`);
 else { bad(`Node ${process.versions.node} — нужен 22+ (лучше 24): ${hint("brew install node", "https://nodejs.org или nvm install 24")}`); process.exit(1); }
 
-step("Пакеты (npm install)");
+step("Пакеты (npm ci)");
 if (args.has("--skip-install")) warn("пропущено (--skip-install)");
 else {
-  const r = spawnSync("npm", ["install", "--no-audit", "--no-fund"], { cwd: ROOT, stdio: "inherit" });
-  if (r.status !== 0) { bad("npm install не прошёл — см. вывод выше"); process.exit(1); }
+  // npm ci ставит ровно то, что в package-lock.json (с проверкой хешей), и не обновляет его.
+  const r = spawnSync("npm", ["ci", "--no-audit", "--no-fund"], { cwd: ROOT, stdio: "inherit" });
+  if (r.status !== 0) { bad("npm ci не прошёл — см. вывод выше"); process.exit(1); }
   ok("пакеты установлены");
 }
 
@@ -89,6 +91,20 @@ if (existsSync(envFile)) ok(".env уже есть — не трогаю");
 else { copyFileSync(join(ROOT, ".env.example"), envFile); ok(".env создан из .env.example — впишите своих провайдеров (или оставьте none)"); }
 
 step("Модель whisper.cpp");
+// Модели — с зафиксированного коммита репозитория на Hugging Face, с проверкой SHA-256 (хеши —
+// из LFS-метаданных этого коммита). Другая модель — скачайте сами и впишите WHISPER_CPP_MODEL.
+const WHISPER_REV = "5359861c739e955e79d9a303bcbc70fb988958b1";
+const WHISPER_SHA256 = {
+  tiny: "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",
+  base: "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+  small: "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+  medium: "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208",
+  "large-v3-turbo": "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69",
+};
+const sha256File = (file) => new Promise((res, rej) => {
+  const h = createHash("sha256");
+  createReadStream(file).on("data", (b) => h.update(b)).on("error", rej).on("end", () => res(h.digest("hex")));
+});
 const MODEL = (() => { const m = [...args].find((a) => a.startsWith("--whisper-model=")); return m ? m.split("=")[1] : "small"; })();
 const modelSet = env.WHISPER_CPP_MODEL || env.WHISPER_MODEL;
 const known = [
@@ -100,15 +116,19 @@ if (args.has("--no-whisper")) warn("пропущено (--no-whisper)");
 else if (modelSet) (existsSync(expandHome(modelSet)) ? ok : warn)(`WHISPER_CPP_MODEL=${modelSet}${existsSync(expandHome(modelSet)) ? "" : " — файла нет"}`);
 else if (known) ok(`модель найдена: ${known}`);
 else if (!whisper) warn("сначала поставьте whisper.cpp, затем снова npm run setup — предложу скачать модель");
+else if (!WHISPER_SHA256[MODEL]) warn(`модель ${MODEL}: нет проверенного хеша (есть: ${Object.keys(WHISPER_SHA256).join(", ")}) — скачайте сами и впишите WHISPER_CPP_MODEL в .env`);
 else {
   const dst = join(homedir(), ".cache/whisper", `ggml-${MODEL}.bin`);
-  const url = `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-${MODEL}.bin`;
+  const url = `https://huggingface.co/ggerganov/whisper.cpp/resolve/${WHISPER_REV}/ggml-${MODEL}.bin`;
   if (await ask(`Скачать модель whisper.cpp ggml-${MODEL}.bin (${MODEL === "small" ? "≈ 0,5 ГБ" : "размер по модели"}, бесплатно) в ${dst}?`)) {
     mkdirSync(dirname(dst), { recursive: true });
     const tmp = dst + ".part";
     const r = spawnSync("curl", ["-fL", "--retry", "3", "-o", tmp, url], { stdio: "inherit" });
-    if (r.status === 0) {
-      renameSync(tmp, dst); ok(`модель: ${dst}`);
+    const sum = r.status === 0 ? await sha256File(tmp).catch(() => "") : "";
+    if (r.status === 0 && sum !== WHISPER_SHA256[MODEL]) {
+      rmSync(tmp, { force: true }); bad(`модель скачалась, но SHA-256 не совпал (${sum.slice(0, 16)}… вместо ${WHISPER_SHA256[MODEL].slice(0, 16)}…) — файл удалён`);
+    } else if (r.status === 0) {
+      renameSync(tmp, dst); ok(`модель: ${dst} (SHA-256 проверен)`);
       if (MODEL !== "small") warn(`не small — впишите в .env: WHISPER_CPP_MODEL=${dst}`);
     } else { rmSync(tmp, { force: true }); warn(`не скачалось — вручную: curl -fL -o ${dst} ${url}`); }
   } else warn(`пропущено; вручную: curl -fL -o ${dst} ${url}`);

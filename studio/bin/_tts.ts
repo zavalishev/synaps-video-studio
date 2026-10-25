@@ -2,7 +2,7 @@
 // Text-to-speech providers configured in .env.
 import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { deps, fetchRetry, fill, need, pick, ProviderError, ProviderNotConfigured, runCommand, short, tmp, type D, type Deps, type Env } from "./_http";
+import { deps, fetchRetry, need, pick, ProviderError, ProviderNotConfigured, runCommand, short, templateProblem, tmp, type D, type Deps, type Env } from "./_http";
 
 export type VoiceConfig = {
   provider: string; model: string; voice: string;
@@ -12,6 +12,16 @@ export type VoiceConfig = {
   style: boolean;         // понимает указания диктору (--style)
 };
 export const OPENAI_VOICES = ["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse", "marin", "cedar"];
+
+export const VOICE_PLACEHOLDERS = ["text_file", "out_wav", "out", "voice", "lang", "style_file", "words_json"];
+// Голос и язык приходят от режиссёра (lines.json, --voice/--lang): только «безопасные» символы.
+// Shell их и так не разбирает (значения — переменными окружения), это вторая линия защиты.
+export const VOICE_RE = /^[\p{L}\p{N}_.:@+() -]{1,128}$/u;
+export const LANG_RE = /^[a-z]{2,3}(?:[-_][A-Za-z0-9]{2,4})?$/;
+const checkVoiceArgs = (voice: string, lang?: string) => {
+  if (voice && !VOICE_RE.test(voice)) throw new ProviderError(`озвучка: недопустимое имя голоса ${JSON.stringify(voice.slice(0, 40))} (буквы, цифры, пробел и _ . : @ + ( ) -)`);
+  if (lang && !LANG_RE.test(lang)) throw new ProviderError(`озвучка: недопустимый код языка ${JSON.stringify(lang.slice(0, 20))} (например ru, en, pt-BR)`);
+};
 
 export const voiceConfig = (env: Env = process.env): VoiceConfig => {
   const p = (env.VOICE_PROVIDER ?? "").trim().toLowerCase() || "none";
@@ -31,8 +41,9 @@ export const voiceConfig = (env: Env = process.env): VoiceConfig => {
   }
   if (p === "command") {
     const tpl = env.VOICE_COMMAND?.trim() ?? "";
-    return { provider: p, model: "command", voice: pick(env, "VOICE_COMMAND_VOICE", "default"), ready: Boolean(tpl),
-      problem: tpl ? undefined : "нет VOICE_COMMAND", tag: `command:${short(tpl)}`,
+    const bad = tpl ? templateProblem("VOICE_COMMAND", tpl, VOICE_PLACEHOLDERS) : "нет VOICE_COMMAND";
+    return { provider: p, model: "command", voice: pick(env, "VOICE_COMMAND_VOICE", "default"), ready: !bad,
+      problem: bad, tag: `command:${short(tpl)}`,
       timestamps: /\{words_json\}/.test(tpl), style: /\{style(_file)?\}/.test(tpl) };
   }
   if (p === "none") return { provider: "none", ...off, problem: "озвучка выключена (VOICE_PROVIDER=none)", tag: "none" };
@@ -117,9 +128,8 @@ const ttsCommand = async (req: TtsRequest, cfg: VoiceConfig, d: D): Promise<TtsR
     const textFile = join(dir, "text.txt"), styleFile = join(dir, "style.txt"), out = join(dir, "out.wav"), wordsFile = join(dir, "words.json");
     writeFileSync(textFile, req.text);
     writeFileSync(styleFile, req.style ?? "");
-    const cmd = fill(tpl, { text_file: textFile, out_wav: out, out, voice: req.voice || cfg.voice, lang: req.lang ?? "",
-      style_file: styleFile, words_json: wordsFile });
-    runCommand("озвучка (VOICE_COMMAND)", cmd, d, Number(d.env.VOICE_COMMAND_TIMEOUT_SEC || 600) * 1000);
+    runCommand("озвучка (VOICE_COMMAND)", tpl, { text_file: textFile, out_wav: out, out, voice: req.voice || cfg.voice, lang: req.lang ?? "",
+      style_file: styleFile, words_json: wordsFile }, d, Number(d.env.VOICE_COMMAND_TIMEOUT_SEC || 600) * 1000);
     if (!existsSync(out) || statSync(out).size === 0) throw new ProviderError("озвучка (VOICE_COMMAND): команда не записала аудио в {out_wav}");
     const audio = readFileSync(out);
     let words: TimedWord[] | undefined;
@@ -140,6 +150,7 @@ export const tts = async (req: TtsRequest, dep: Deps = {}): Promise<TtsResult> =
   const d = deps(dep);
   const cfg = voiceConfig(d.env);
   if (!cfg.ready) throw new ProviderNotConfigured(`озвучка: ${cfg.problem}`);
+  checkVoiceArgs(req.voice || cfg.voice, req.lang);
   if (cfg.provider === "openai") return ttsOpenAI(req, cfg, d);
   if (cfg.provider === "elevenlabs") return ttsElevenLabs(req, cfg, d);
   return ttsCommand(req, cfg, d);

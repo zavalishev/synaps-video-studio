@@ -5,6 +5,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { SECRET_VARS } from "./_http";
 
 const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -58,10 +59,20 @@ export const DOTENV_KEYS: string[] =
   process.env.STUDIO_DOTENV === "0" || process.env.VITEST ? [] : loadDotenv(ENV_FILE);
 
 // Окружение режиссёра (claude -p из make.ts): без ключей, пришедших из .env (инструменты студии
-// перечитают .env сами), и без переменных родительской сессии Claude Code — при запуске из
-// интерактивного claude (скилл make-video) вложенный claude -p иначе считает себя частью чужой
-// сессии. Авторизация пользователя (подписка, CLAUDE_CODE_OAUTH_TOKEN, Bedrock/Vertex) остаётся.
-// Director env: drops .env keys and parent Claude Code session variables, keeps the user's auth.
+// перечитают .env сами), без похожих на ключи переменных из окружения оболочки (OPENAI_API_KEY,
+// GITHUB_TOKEN… из ~/.zshrc — одна команда env, и ключ в контексте модели и в director.log),
+// и без переменных родительской сессии Claude Code — при запуске из интерактивного claude
+// (скилл make-video) вложенный claude -p иначе считает себя частью чужой сессии.
+// Авторизация Claude Code (подписка, CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_*, Bedrock/Vertex) остаётся.
+// Director env: drops .env keys, key-like shell variables and parent Claude Code session variables;
+// keeps Claude Code's own auth.
 const PARENT_SESSION = /^(CLAUDECODE|CLAUDE_PID|CLAUDE_AGENT_SDK_VERSION|CLAUDE_CODE_(ENTRYPOINT|SESSION_\w+|CHILD_SESSION|MESSAGING_\w+|SSE_PORT|EXECPATH))$/;
+const KEY_LIKE = /(_API_KEY|_KEY|_TOKEN|_SECRET|PASSWORD|_PASS)$/i;
+const CLAUDE_AUTH = /^(ANTHROPIC_\w+|CLAUDE_CODE_OAUTH_TOKEN|AWS_\w+|CLOUD_ML_REGION|VERTEX_\w+|GOOGLE_APPLICATION_CREDENTIALS|GOOGLE_CLOUD_PROJECT)$/;
+export const isShellSecret = (k: string) => !CLAUDE_AUTH.test(k) && (SECRET_VARS.includes(k) || KEY_LIKE.test(k));
 export const directorEnv = (env: NodeJS.ProcessEnv, dotenvKeys: string[]): Record<string, string> =>
-  Object.fromEntries(Object.entries(env).filter((e): e is [string, string] => e[1] !== undefined && !dotenvKeys.includes(e[0]) && !PARENT_SESSION.test(e[0])));
+  Object.fromEntries(Object.entries(env).filter((e): e is [string, string] =>
+    e[1] !== undefined && !dotenvKeys.includes(e[0]) && !PARENT_SESSION.test(e[0]) && !isShellSecret(e[0])));
+// Ключи провайдеров, заданные в окружении оболочки (а не в .env), — для предупреждения в make.ts.
+export const shellSecrets = (env: NodeJS.ProcessEnv, dotenvKeys: string[]): string[] =>
+  Object.keys(env).filter((k) => env[k] && !dotenvKeys.includes(k) && SECRET_VARS.includes(k));

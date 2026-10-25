@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
-import sharp from "sharp";
+import sharp, { type OverlayOptions } from "sharp";
 import { die, ensureDir, num, parseArgs, str } from "./_lib";
 
 const a = parseArgs();
@@ -65,7 +65,7 @@ const main = async () => {
     const rows = Math.ceil(tiles.length / cols);
     const gap = 6;
     const W = cols * tw + (cols + 1) * gap, H = rows * (th + lh) + (rows + 1) * gap;
-    const comps: sharp.OverlayOptions[] = [];
+    const comps: OverlayOptions[] = [];
     for (let i = 0; i < tiles.length; i++) {
       const x = gap + (i % cols) * (tw + gap), y = gap + Math.floor(i / cols) * (th + lh + gap);
       const img = await sharp(tiles[i].file).resize(tw, th, { fit: "contain", background: "#808080" }).flatten({ background: "#808080" }).png().toBuffer();

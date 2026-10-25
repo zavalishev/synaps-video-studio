@@ -276,13 +276,13 @@ export const FlowGraph: React.FC<{
           if (g <= 0) return null;
           const ev = drawOn(g, d, stroke);
           const len = getLength(d);
-          const tip = getPointAtLength(d, len * g);
-          const back = getPointAtLength(d, Math.max(0, len * g - 2));
+          const tip = getPointAtLength(d, len * g) ?? { x: 0, y: 0 };
+          const back = getPointAtLength(d, Math.max(0, len * g - 2)) ?? tip;
           const ang = (Math.atan2(tip.y - back.y, tip.x - back.x) * 180) / Math.PI;
           const period = Math.round(fps * 1.5);
           const pulseT = e.pulse && g >= 1 ? ((f - e.at - (e.dur ?? 18)) % period) / period : -1;
           const pp = pulseT >= 0 ? getPointAtLength(d, len * pulseT) : null;
-          const mid = getPointAtLength(d, len * 0.5);
+          const mid = getPointAtLength(d, len * 0.5) ?? { x: 0, y: 0 };
           return (
             <g key={i}>
               <path d={d} fill="none" stroke={t.accent} strokeWidth={stroke} strokeLinecap="round"

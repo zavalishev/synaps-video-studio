@@ -30,23 +30,23 @@
   },
   "dependencies": {
     "@react-three/fiber": "9.7.0",
-    "@remotion/bundler": "4.0.436",
-    "@remotion/captions": "4.0.436",
-    "@remotion/google-fonts": "4.0.436",
-    "@remotion/layout-utils": "4.0.436",
-    "@remotion/media-utils": "4.0.436",
-    "@remotion/motion-blur": "4.0.436",
-    "@remotion/noise": "4.0.436",
-    "@remotion/paths": "4.0.436",
-    "@remotion/renderer": "4.0.436",
-    "@remotion/three": "4.0.436",
-    "@remotion/transitions": "4.0.436",
+    "@remotion/bundler": "4.0.534",
+    "@remotion/captions": "4.0.534",
+    "@remotion/google-fonts": "4.0.534",
+    "@remotion/layout-utils": "4.0.534",
+    "@remotion/media-utils": "4.0.534",
+    "@remotion/motion-blur": "4.0.534",
+    "@remotion/noise": "4.0.534",
+    "@remotion/paths": "4.0.534",
+    "@remotion/renderer": "4.0.534",
+    "@remotion/three": "4.0.534",
+    "@remotion/transitions": "4.0.534",
     "d3-scale": "4.0.2",
     "d3-shape": "3.2.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "remotion": "4.0.436",
-    "sharp": "0.33.5",
+    "remotion": "4.0.534",
+    "sharp": "0.35.5",
     "three": "0.185.1"
   },
   "devDependencies": {
@@ -58,5 +58,9 @@
     "tsx": "4.19.2",
     "typescript": "5.9.3",
     "vitest": "2.1.8"
+  },
+  "overrides": {
+    "ws": "8.22.0",
+    "zod": "4.6.6"
   }
 }
