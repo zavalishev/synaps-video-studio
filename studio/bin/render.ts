@@ -6,13 +6,14 @@
 // рендерятся, новая дорожка (−14 LUFS) подкладывается к готовому out/final.mp4 (-c:v copy).
 // Секунды вместо полного рендера; probe по картинке после этого не нужен — только mixcheck.
 // Нарушения страховки кадра со всех кадров → рядом с mp4: <имя>.guard.json (его читает probe).
-import { existsSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { cpus } from "node:os";
 import { dirname } from "node:path";
 import { ff } from "./_media";
 import { budgetLine, bundleJob, COMPOSITION, ensureDir, glOpt, guardCollector, inJob, jobDir, num, parseArgs, parseProps, printGuard, str, withRenderSlot, quietBrowserTags } from "./_lib";
 import { appendRegistry } from "./_registry";
+import { deps, runCommand } from "./_http";
 import { finalGate } from "./_gate";
 
 const a = parseArgs(process.argv.slice(2), ["probe", "no-loudnorm", "audio-only"]);
@@ -79,7 +80,35 @@ const main = async () => {
   const raw = out.replace(/\.mp4$/, ".raw.mp4");
   const t = Date.now();
   let lastPct = -1;
-  await withRenderSlot(`render ${dir}`, () => renderMedia({
+  // Рендер на другой машине (STUDIO_RENDER_COMMAND): готовый бандл (статичный сайт сцен) уходит
+  // внешней программе, она возвращает mp4 со звуком. Например, очередь к Mac с видеочипом вместо
+  // CPU сервера. Не вышло — рендер здесь же. Страховка кадра (guard) при удалённом рендере не
+  // собирается: её дают review.ts и studio still, которые рендерят локально.
+  const remote = process.env.STUDIO_RENDER_COMMAND?.trim();
+  let remoteOk = false, guardFromRemote = false;
+  if (remote) {
+    const propsFile = inJob(dir, "out/.render-props.json");
+    writeFileSync(propsFile, JSON.stringify(props));
+    try {
+      runCommand("рендер (STUDIO_RENDER_COMMAND)", remote, {
+        bundle: serveUrl, composition: COMPOSITION, props_file: propsFile, out: raw,
+        scale: String(num(a, "scale", 1)), crf: String(num(a, "crf", 18)), frames: fr ?? "",
+      }, deps(), Number(process.env.STUDIO_RENDER_COMMAND_TIMEOUT_SEC || 2400) * 1000);
+      remoteOk = existsSync(raw);
+      if (!remoteOk) console.error("удалённый рендер не вернул файл — рендерю здесь");
+      // Консоль браузера удалённого рендера (render-bundle.mjs: <out>.browser.log) → та же страховка кадра.
+      const blog = `${raw}.browser.log`;
+      if (remoteOk && existsSync(blog)) {
+        for (const line of readFileSync(blog, "utf8").split("\n")) {
+          const i = line.indexOf("\t");
+          if (i > 0) guard.onBrowserLog({ type: line.slice(0, i), text: line.slice(i + 1) } as never);
+        }
+        guardFromRemote = true;
+        rmSync(blog, { force: true });
+      }
+    } catch (e) { console.error(`удалённый рендер не удался (${(e as Error).message.split("\n")[0].slice(0, 200)}) — рендерю здесь`); }
+  }
+  if (!remoteOk) await withRenderSlot(`render ${dir}`, () => renderMedia({
     serveUrl, composition: comp, codec: "h264", outputLocation: raw, inputProps: props, chromiumOptions,
     crf: num(a, "crf", 18), scale: num(a, "scale", 1), concurrency: num(a, "concurrency", Number(process.env.STUDIO_RENDER_CONCURRENCY) || Math.max(2, Math.min(8, cpus().length - 4))),
     frameRange, audioCodec: "aac", overwrite: true, onBrowserLog: guard.onBrowserLog, logLevel: "error",
@@ -97,7 +126,8 @@ const main = async () => {
   const guardFile = out.replace(/\.mp4$/, ".guard.json");
   const list = guard.save(guardFile);
   console.error(`\nрендер ${comp.durationInFrames} кадров за ${sec.toFixed(1)} с (${(sec / (comp.durationInFrames / comp.fps)).toFixed(2)} с на секунду ролика)`);
-  printGuard(list);
+  if (remoteOk && !guardFromRemote) console.error("страховка кадра: рендер был удалённым без журнала браузера — нарушения смотри в review.ts и studio still");
+  else printGuard(list);
   if (!existsSync(out)) throw new Error("нет файла результата");
   // Обезличенный отпечаток облика (тема, без контента) — в реестр студии для board.ts.
   if (!fr && num(a, "scale", 1) === 1 && /final\.mp4$/.test(out)) appendRegistry(dir);
