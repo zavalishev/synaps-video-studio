@@ -7,13 +7,13 @@ import { basename, dirname, join } from "node:path";
 import sharp, { type OverlayOptions } from "sharp";
 import { dominantColors, layoutOf, lookCell, type Layout } from "../lib/art-direction/looks";
 import { readRegistry, registryId, voiceOf } from "./_registry";
-import { ROOT } from "./_lib";
+import { CACHE_DIR, JOBS_DIR } from "./_lib";
 
 export type Look = { id: string; label: string; at: string; bg?: string; ink?: string; accent?: string; cell?: string; voice?: string; display?: string; layout?: Layout; note?: string; story?: string; job?: string };
 
 // Новые сначала; свой ролик (dir) не входит.
 export const recentLooks = (dir: string | null, n = 10): Look[] => {
-  const jobsDir = join(ROOT, "jobs");
+  const jobsDir = JOBS_DIR;
   const byId = new Map<string, string>(); // id реестра → папка ролика (только локально, для превью)
   const local: Look[] = [];
   if (existsSync(jobsDir)) {
@@ -63,7 +63,7 @@ const frame0 = (job?: string): string | null => {
   if (!job) return null;
   const src = [join(job, "out", "final.mp4"), join(job, "out", "review", "draft.mp4")].find(existsSync);
   if (!src) return null;
-  const cache = join(ROOT, ".cache", "looks");
+  const cache = join(CACHE_DIR, "looks");
   mkdirSync(cache, { recursive: true });
   const out = join(cache, `${registryId(job)}-${Math.round(statSync(src).mtimeMs)}.png`);
   if (!existsSync(out)) spawnSync("ffmpeg", ["-v", "error", "-y", "-i", src, "-frames:v", "1", "-vf", "scale=240:-2", out]);

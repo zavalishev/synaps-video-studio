@@ -1,9 +1,9 @@
 // Создание папки ролика jobs/<slug> из studio/template (общая часть new.ts и make.ts).
 import { copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { extname, join, relative } from "node:path";
-import { ROOT, STUDIO } from "./_lib";
+import { JOBS_DIR, ROOT, STUDIO } from "./_lib";
 
-export const JOBS = join(ROOT, "jobs");
+export const JOBS = JOBS_DIR;
 
 export const slugify = (s: string) =>
   s.toLowerCase().replace(/ё/g, "е")

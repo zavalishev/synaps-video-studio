@@ -3,13 +3,17 @@
 // Платные провайдеры (TTS, картинки, тайминги) — _providers.ts; ffmpeg и кэш — _media.ts.
 // Настройки пользователя (.env в корне) загружаются первым импортом — до любых провайдеров.
 import "./_env";
-import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const STUDIO = join(ROOT, "studio");
 export const LIB = join(STUDIO, "lib");
+// Где лежат ролики и кэш (по умолчанию — в репозитории). На сервере студия может стоять
+// только для чтения, а ролик — в отдельной папке проекта: STUDIO_JOBS_DIR, STUDIO_CACHE_DIR.
+export const JOBS_DIR = process.env.STUDIO_JOBS_DIR ? resolve(process.env.STUDIO_JOBS_DIR) : join(ROOT, "jobs");
+export const CACHE_DIR = process.env.STUDIO_CACHE_DIR ? resolve(process.env.STUDIO_CACHE_DIR) : join(ROOT, ".cache");
 
 export type Args = { _: string[]; [k: string]: string | boolean | string[] };
 
@@ -104,9 +108,41 @@ export const inJobStrict = (dir: string, p: string, what = "путь"): string =
 // ---------- Remotion ----------
 export const COMPOSITION = "Video";
 
+// Шрифты без интернета: STUDIO_FONTS_DIR — зеркало файлов Google Fonts (scripts/fonts-offline.mjs).
+// Перед сборкой в public/fonts-offline/ ролика копируются только семейства, которые
+// импортируют сцены ролика и библиотека студии; studio/lib/fonts.ts берёт их оттуда.
+const FONT_IMPORT = /@remotion\/google-fonts\/(\w+)/g;
+const fontFamiliesUsed = (dirs: string[]): Set<string> => {
+  const out = new Set<string>();
+  const walk = (d: string) => {
+    if (!existsSync(d)) return;
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      if (e.name.startsWith(".") || e.name === "node_modules") continue;
+      const f = join(d, e.name);
+      if (e.isDirectory()) walk(f);
+      else if (/\.(tsx?|jsx?)$/.test(e.name)) for (const m of readFileSync(f, "utf8").matchAll(FONT_IMPORT)) out.add(m[1]);
+    }
+  };
+  dirs.forEach(walk);
+  return out;
+};
+export const offlineFonts = (dir: string): boolean => {
+  const mirror = process.env.STUDIO_FONTS_DIR;
+  if (!mirror) return false;
+  const dst = join(dir, "public", "fonts-offline");
+  for (const fam of fontFamiliesUsed([join(dir, "src"), LIB])) {
+    const src = join(mirror, fam);
+    if (!existsSync(src)) die(`шрифт ${fam}: нет в зеркале STUDIO_FONTS_DIR (${mirror}) — выберите другое семейство (studio fonts)`);
+    const to = join(dst, fam);
+    if (!existsSync(to)) cpSync(src, to, { recursive: true });
+  }
+  return true;
+};
+
 export const bundleJob = async (dir: string): Promise<string> => {
-  const { bundle } = await import("@remotion/bundler");
+  const { bundle, webpack } = await import("@remotion/bundler");
   const t = Date.now();
+  const offline = offlineFonts(dir);
   const url = await bundle({
     entryPoint: join(dir, "src", "index.ts"),
     publicDir: join(dir, "public"),
@@ -115,6 +151,7 @@ export const bundleJob = async (dir: string): Promise<string> => {
     webpackOverride: (c) => ({
       ...c,
       resolve: { ...c.resolve, alias: { ...((c.resolve?.alias as Record<string, string>) ?? {}), "@studio": LIB } },
+      plugins: [...(c.plugins ?? []), new webpack.DefinePlugin({ __STUDIO_FONTS_OFFLINE__: JSON.stringify(offline) })],
     }),
   });
   console.error(`сборка: ${((Date.now() - t) / 1000).toFixed(1)} с`);
@@ -167,7 +204,8 @@ export const parseProps = (a: Args): Record<string, unknown> => {
   try { return JSON.parse(existsSync(p) ? readFileSync(p, "utf8") : p); } catch { return die("--props: не JSON и не файл"); }
 };
 
-export const glOpt = (a: Args) => (str(a, "gl") ?? "angle") as "angle" | "swangle" | "egl" | "swiftshader" | "vulkan" | "angle-egl";
+// GL рендера: --gl, иначе STUDIO_GL (сервер без видеокарты — swangle), иначе angle.
+export const glOpt = (a: Args) => (str(a, "gl") ?? process.env.STUDIO_GL ?? "angle") as "angle" | "swangle" | "egl" | "swiftshader" | "vulkan" | "angle-egl";
 
 // ---------- очередь рендеров ----------
 // Несколько роликов параллельно (несколько директоров) делят процессор: одновременные рендеры
@@ -179,7 +217,7 @@ export const withRenderSlot = async <T>(what: string, fn: () => Promise<T>): Pro
   const { cpus } = await import("node:os");
   const { rmSync } = await import("node:fs");
   const slots = Math.max(1, Number(process.env.STUDIO_RENDER_SLOTS) || Math.floor(cpus().length / 8));
-  const dir = join(ROOT, ".cache", "locks");
+  const dir = join(CACHE_DIR, "locks");
   mkdirSync(dir, { recursive: true });
   const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
   let held: string | null = null, waited = false;

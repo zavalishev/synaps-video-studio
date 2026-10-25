@@ -3,7 +3,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { ROOT } from "./_lib";
+import { CACHE_DIR } from "./_lib";
 
 export const sha = (s: string) => createHash("sha256").update(s).digest("hex").slice(0, 16);
 
@@ -17,9 +17,9 @@ export const ff = (args: string[]) => {
   if (r.status !== 0) throw new Error("ffmpeg: " + r.stderr.toString());
 };
 
-// Кэш платных шагов (.cache/<kind> в корне репо, не в git): повтор того же запроса — бесплатно.
+// Кэш платных шагов (.cache/<kind> в корне репо или STUDIO_CACHE_DIR, не в git): повтор того же запроса — бесплатно.
 export const cacheDir = (kind: string) => {
-  const d = join(ROOT, ".cache", kind);
+  const d = join(CACHE_DIR, kind);
   mkdirSync(d, { recursive: true });
   return d;
 };

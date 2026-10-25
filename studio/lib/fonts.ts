@@ -24,6 +24,25 @@ export type GoogleFontModule = {
 
 const loaded = new Map<string, string>();
 
+// Без интернета (сервер, закрытая сеть): файлы шрифтов лежат в public/fonts-offline/<семейство>/
+// — их кладёт сборка (bundleJob при STUDIO_FONTS_DIR), а флаг подставляет DefinePlugin.
+declare const __STUDIO_FONTS_OFFLINE__: boolean | undefined;
+const OFFLINE = typeof __STUDIO_FONTS_OFFLINE__ !== "undefined" && __STUDIO_FONTS_OFFLINE__ === true;
+// Имя файла в зеркале — то же правило, что в scripts/fonts-offline.mjs.
+const offlineName = (url: string) => { const n = url.split("/").pop() ?? url; return n.length > 200 ? n.slice(-120) : n; };
+type FontInfo = FontMeta & { importName: string; unicodeRanges: Record<string, string> };
+const loadOffline = (info: FontInfo, style: string, weights: string[], subsets: string[]) => {
+  if (typeof document === "undefined") return;
+  const h = delayRender(`font ${info.fontFamily} (offline)`);
+  const faces = weights.flatMap((w) => subsets.map((s) => {
+    const url = info.fonts[style][w][s];
+    const file = staticFile(`fonts-offline/${info.importName}/${offlineName(url)}`);
+    return new FontFace(info.fontFamily, `url(${file}) format("woff2")`, { weight: w, style, unicodeRange: info.unicodeRanges[s] })
+      .load().then((f) => { document.fonts.add(f); });
+  }));
+  Promise.all(faces).then(() => continueRender(h)).catch((e) => cancelRender(new Error(`шрифт ${info.fontFamily}: нет локального файла (STUDIO_FONTS_DIR) — ${e}`)));
+};
+
 // Не хук: можно звать на уровне модуля. Возвращает CSS font-family (с запасным).
 export const loadCyrillicFont = (mod: GoogleFontModule, o: { style?: "normal" | "italic"; weights: string[]; extraSubsets?: string[] }): string => {
   const info = mod.getInfo() as FontMeta;
@@ -38,7 +57,9 @@ export const loadCyrillicFont = (mod: GoogleFontModule, o: { style?: "normal" | 
     if (!("cyrillic" in st[w])) throw new Error(`шрифт ${info.fontFamily} ${w} ${style}: нет кириллицы — возьмите другой (studio fonts)`);
   }
   const subsets = ["cyrillic", "latin", ...(o.extraSubsets ?? [])].filter((s) => o.weights.every((w) => s in st[w]));
-  const { fontFamily } = mod.loadFont(style, { weights: o.weights, subsets });
+  let fontFamily: string;
+  if (OFFLINE) { loadOffline(info as FontInfo, style, o.weights, subsets); fontFamily = info.fontFamily; }
+  else fontFamily = mod.loadFont(style, { weights: o.weights, subsets }).fontFamily;
   const css = `${fontFamily}, sans-serif`;
   loaded.set(key, css);
   return css;

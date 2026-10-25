@@ -6,11 +6,11 @@
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { ROOT } from "./_lib";
+import { CACHE_DIR } from "./_lib";
 import voices from "../lib/font-voices.json";
 import { layoutOf, lookCell, type Layout } from "../lib/art-direction/looks";
 
-export const REGISTRY = process.env.STUDIO_REGISTRY ?? join(ROOT, ".cache", "studio-registry.jsonl");
+export const REGISTRY = process.env.STUDIO_REGISTRY ?? join(CACHE_DIR, "studio-registry.jsonl");
 
 // Штампы «AI-стока»: тёплый янтарный свет из окна, малая глубина резкости, боке, дерево.
 export const AMBER_TOKENS = ["golden", "amber", "warm", "window light", "shallow depth of field", "bokeh", "wood", "cozy", "candlelight", "rustic"];

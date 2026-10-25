@@ -204,7 +204,7 @@ const render = async (): Promise<{ tracks: Track[]; guard: GuardHit[]; fps: numb
   let last = -1;
   await withRenderSlot(`review ${dir}`, () => renderMedia({
     serveUrl, composition: comp, codec: "h264", outputLocation: raw, inputProps: props, chromiumOptions,
-    crf: 23, scale: num(a, "scale", 0.5), concurrency: num(a, "concurrency", Math.max(2, Math.min(8, cpus().length - 4))),
+    crf: 23, scale: num(a, "scale", 0.5), concurrency: num(a, "concurrency", Number(process.env.STUDIO_RENDER_CONCURRENCY) || Math.max(2, Math.min(8, cpus().length - 4))),
     frameRange, audioCodec: "aac", overwrite: true, onBrowserLog, logLevel: "error",
     onProgress: ({ progress }) => { const p = Math.floor(progress * 10); if (p !== last && process.stderr.isTTY) { last = p; process.stderr.write(`черновик ${p * 10}%\r`); } },
   }));

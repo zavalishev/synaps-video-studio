@@ -10,7 +10,7 @@
 import { createRequire } from "node:module";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { LIB, parseArgs, ROOT } from "./_lib";
+import { JOBS_DIR, LIB, parseArgs, ROOT } from "./_lib";
 import { recentLooks } from "./_looks";
 
 type Entry = { family: string; module: string; styles: Record<string, string[]> };
@@ -54,7 +54,7 @@ if (a.suggest !== undefined) {
   const pool = [...voices[voice]].map((m) => ({ m, k: rnd() })).sort((p, q) => p.k - q.k).map((x) => x.m);
   // Частые в последних роликах: display/caption из jobs/*/theme.json (последние 12 по времени).
   const recent = new Map<string, number>();
-  const jobs = join(ROOT, "jobs");
+  const jobs = JOBS_DIR;
   if (existsSync(jobs)) {
     const dirs = readdirSync(jobs).filter((d) => !d.startsWith("_") && existsSync(join(jobs, d, "theme.json"))).map((d) => ({ d, t: statSync(join(jobs, d, "theme.json")).mtimeMs })).sort((p, q) => q.t - p.t).slice(0, 12);
     for (const { d } of dirs) {

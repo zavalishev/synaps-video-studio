@@ -182,3 +182,38 @@ describe("окружение и студия", () => {
     expect(studioChanges(before, studioSnapshot(root))).toEqual(["+ studio/new.ts", "~ studio/CLAUDE.md"]);
   });
 });
+
+describe("серверный режим", () => {
+  it("STUDIO_CODEX_ARGS — свой поставщик модели для Codex", async () => {
+    const { codexExtraArgs } = await import("../studio/bin/_agents");
+    expect(codexExtraArgs({})).toEqual([]);
+    expect(codexExtraArgs({ STUDIO_CODEX_ARGS: '["-c","model_provider=\\"pool\\""]' })).toEqual(["-c", 'model_provider="pool"']);
+    expect(() => codexExtraArgs({ STUDIO_CODEX_ARGS: "-c x" })).toThrow(/JSON-массив/);
+    const prev = process.env.STUDIO_CODEX_ARGS;
+    process.env.STUDIO_CODEX_ARGS = '["-c","model_provider=\\"pool\\""]';
+    const args = pickAgent("codex", { CODEX_BIN: BIN }).args(opts());
+    if (prev === undefined) delete process.env.STUDIO_CODEX_ARGS; else process.env.STUDIO_CODEX_ARGS = prev;
+    expect(args.slice(-3)).toEqual(["-c", 'model_provider="pool"', "-"]);
+  });
+  it("STUDIO_GL — GL рендера по умолчанию", async () => {
+    const { glOpt } = await import("../studio/bin/_lib");
+    const prev = process.env.STUDIO_GL;
+    process.env.STUDIO_GL = "swangle";
+    expect(glOpt({ _: [] } as never)).toBe("swangle");
+    expect(glOpt({ _: [], gl: "angle" } as never)).toBe("angle");
+    if (prev === undefined) delete process.env.STUDIO_GL; else process.env.STUDIO_GL = prev;
+  });
+  it("шрифты без интернета: в ролик копируются только используемые семейства", async () => {
+    const { offlineFonts } = await import("../studio/bin/_lib");
+    const mirror = tmp(), job = tmp();
+    for (const f of ["Manrope", "Unbounded", "Caveat", "JetBrainsMono", "PlayfairDisplay", "Lobster", "Oswald"]) { mkdirSync(join(mirror, f)); writeFileSync(join(mirror, f, "a.woff2"), f); }
+    mkdirSync(join(job, "src"));
+    writeFileSync(join(job, "src", "A.tsx"), 'import * as L from "@remotion/google-fonts/Lobster";');
+    const prev = process.env.STUDIO_FONTS_DIR;
+    process.env.STUDIO_FONTS_DIR = mirror;
+    expect(offlineFonts(job)).toBe(true);
+    if (prev === undefined) delete process.env.STUDIO_FONTS_DIR; else process.env.STUDIO_FONTS_DIR = prev;
+    expect(readFileSync(join(job, "public", "fonts-offline", "Lobster", "a.woff2"), "utf8")).toBe("Lobster");
+    expect(() => readFileSync(join(job, "public", "fonts-offline", "Oswald", "a.woff2"))).toThrow();
+  });
+});

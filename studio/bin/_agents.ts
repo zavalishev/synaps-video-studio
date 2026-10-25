@@ -157,6 +157,9 @@ const codex = (bin: string): Agent => ({
     "-C", o.dir,
     ...(o.model ? ["-m", o.model] : []),
     ...(o.effort ? ["-c", `model_reasoning_effort="${o.effort}"`] : []),
+    // Свой поставщик модели (сервер со своим прокси, а не вход по подписке): STUDIO_CODEX_ARGS —
+    // JSON-массив аргументов, например ["-c","model_provider=\"pool\"","-c","model_providers.pool.base_url=\"…\""].
+    ...codexExtraArgs(),
     "-", // промпт — из stdin
   ],
   stdin: (o) => o.prompt,
@@ -166,6 +169,16 @@ const codex = (bin: string): Agent => ({
   env: (base, o) => ({ ...base, CODEX_HOME: codexHome(), GIT_CEILING_DIRECTORIES: dirname(o.dir) }),
   parser: codexParser,
 });
+
+// Дополнительные аргументы codex exec из STUDIO_CODEX_ARGS (JSON-массив строк).
+export const codexExtraArgs = (env: NodeJS.ProcessEnv = process.env): string[] => {
+  const v = env.STUDIO_CODEX_ARGS?.trim();
+  if (!v) return [];
+  let a: unknown;
+  try { a = JSON.parse(v); } catch { throw new Error("STUDIO_CODEX_ARGS: нужен JSON-массив строк"); }
+  if (!Array.isArray(a) || !a.every((x) => typeof x === "string")) throw new Error("STUDIO_CODEX_ARGS: нужен JSON-массив строк");
+  return a as string[];
+};
 
 // Кто режиссёр: явный выбор (--agent / STUDIO_AGENT) или первый установленный.
 export const pickAgent = (choice: string | undefined, env: NodeJS.ProcessEnv = process.env): Agent => {

@@ -81,7 +81,7 @@ const main = async () => {
   let lastPct = -1;
   await withRenderSlot(`render ${dir}`, () => renderMedia({
     serveUrl, composition: comp, codec: "h264", outputLocation: raw, inputProps: props, chromiumOptions,
-    crf: num(a, "crf", 18), scale: num(a, "scale", 1), concurrency: num(a, "concurrency", Math.max(2, Math.min(8, cpus().length - 4))),
+    crf: num(a, "crf", 18), scale: num(a, "scale", 1), concurrency: num(a, "concurrency", Number(process.env.STUDIO_RENDER_CONCURRENCY) || Math.max(2, Math.min(8, cpus().length - 4))),
     frameRange, audioCodec: "aac", overwrite: true, onBrowserLog: guard.onBrowserLog, logLevel: "error",
     onProgress: ({ progress }) => { const p = Math.floor(progress * 10); if (p !== lastPct && process.stderr.isTTY) { lastPct = p; process.stderr.write(`рендер ${p * 10}%\r`); } },
   }));
