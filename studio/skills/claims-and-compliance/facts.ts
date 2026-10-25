@@ -111,7 +111,7 @@ export const numbersInWords = (tokens: string[]): Array<{ n: number; src: string
   return out;
 };
 
-// Числа, записанные цифрами: «2 500 ₽» → 2500 (и 2, 500), «+7 (900) 123-45-67» → 7, 900, 123, 45, 67.
+// Числа, записанные цифрами: «2 500 ₽» → 2500 (и 2, 500), «+7 (999) 000-11-22» → 7, 999, 000, 11, 22.
 export const numbersInText = (s: string): number[] => {
   const out = new Set<number>();
   // «2 500» — одно число (части 2 и 500 сами по себе не факты)
