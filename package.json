@@ -1,12 +1,12 @@
 {
-  "name": "ai-video-studio",
+  "name": "synaps-video-studio",
   "version": "0.1.0",
   "private": false,
   "description": "Agentic AI motion-design studio for Reels/Shorts: Claude Code is the director, Remotion + skills are the crew. Brief in, vertical MP4 out.",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/<owner>/ai-video-studio.git"
+    "url": "git+https://github.com/zavalishev/synaps-video-studio.git"
   },
   "keywords": [
     "remotion",
@@ -62,5 +62,7 @@
   "overrides": {
     "ws": "8.22.0",
     "zod": "4.6.6"
-  }
+  },
+  "author": "Alik Zavalishev / Synaps (https://synapschat.com)",
+  "homepage": "https://github.com/zavalishev/synaps-video-studio#readme"
 }

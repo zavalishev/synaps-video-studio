@@ -1,10 +1,10 @@
-# AI Video Studio
+# Synaps Video Studio
 
 **An agentic AI motion-design studio for short vertical videos: Reels, Shorts, TikTok.**
 You write a brief, Claude Code runs as the director on your own subscription, and you get a
 finished MP4.
 
-> Made by: <your name, team or link>
+> Made by the Synaps team — [synapschat.com](https://synapschat.com)
 
 [Русская версия](README.md)
 
@@ -55,7 +55,7 @@ brew install node ffmpeg
 curl -fsSL https://claude.ai/install.sh | bash   # Claude Code; installs to ~/.local/bin — add it to PATH if `claude` isn't found
 
 # 2. The studio
-git clone https://github.com/<owner>/ai-video-studio && cd ai-video-studio
+git clone https://github.com/zavalishev/synaps-video-studio && cd synaps-video-studio
 npm run setup                                    # packages, tool check, .env, whisper model, doctor
 
 # 3. Sign in to Claude Code with your subscription, once
@@ -313,9 +313,11 @@ brief → doctor (what's connected) → brief facts → three concepts → style
 
 ## Licensing
 
-- **Studio code: MIT** ([`LICENSE`](LICENSE)). When you copy or fork it, keep the `LICENSE` file
-  with its original copyright line; you can credit your own changes separately.
-- **Remotion has its own license, not MIT.** It is free for individuals, non-profits and
+- **Studio code: Apache License 2.0** ([`LICENSE`](LICENSE), [`NOTICE`](NOTICE)). You may use,
+  modify and redistribute it, including in commercial products. When you copy or fork it, keep
+  `LICENSE` and `NOTICE` (attribution: Alik Zavalishev / Synaps) and mark your changes in the
+  modified files.
+- **Remotion has its own license, not Apache.** It is free for individuals, non-profits and
   companies of **up to 3 people**. Larger companies need a paid company license:
   <https://www.remotion.dev/license>.
 - **Sound effects** in `public/sfx`: Kenney, CC0.

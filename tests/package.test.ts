@@ -37,7 +37,12 @@ describe("чистота публичного репозитория", () => {
     for (const f of files) {
       const s = readFileSync(f, "utf8");
       const low = s.toLowerCase();
-      for (const b of banned) if (low.includes(b)) hits.push(`${relative(ROOT, f)}: «${b}»`);
+      // Бренд авторов — только в подписи и карточках пакета, не в коде студии.
+      const brandOk = /^(README(\.en)?\.md|NOTICE|package(-lock)?\.json|LICENSE)$/.test(relative(ROOT, f));
+      for (const b of banned) {
+        if ((b === "synaps" || b === "синапс") && brandOk) continue;
+        if (low.includes(b)) hits.push(`${relative(ROOT, f)}: «${b}»`);
+      }
       // Фальшивые ключи тестов провайдеров узнаются по словам-маркерам (test, secret, …).
       const fake = /test|secret|other|abcdef|img-|xxxx/i;
       for (const k of keyLike) for (const m of s.matchAll(new RegExp(k.source, k.flags + "g"))) if (!fake.test(m[0])) hits.push(`${relative(ROOT, f)}: похоже на ключ`);
@@ -57,13 +62,13 @@ describe("чистота публичного репозитория", () => {
 
   it("package.json готов к публикации", () => {
     const p = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
-    expect(p).toMatchObject({ name: "ai-video-studio", version: "0.1.0", private: false, license: "MIT" });
-    expect(p.repository?.url).toContain("ai-video-studio");
+    expect(p).toMatchObject({ name: "synaps-video-studio", version: "0.1.0", private: false, license: "Apache-2.0" });
+    expect(p.repository?.url).toContain("synaps-video-studio");
     expect(Object.keys(p.scripts)).toEqual(expect.arrayContaining(["setup", "make", "doctor", "typecheck", "test"]));
   });
 
-  it("лицензии: MIT, сторонние компоненты, Remotion отмечен в README", () => {
-    expect(readFileSync(join(ROOT, "LICENSE"), "utf8")).toMatch(/^MIT License[\s\S]*Copyright \(c\) 2026/);
+  it("лицензии: Apache 2.0, сторонние компоненты, Remotion отмечен в README", () => {
+    expect(readFileSync(join(ROOT, "LICENSE"), "utf8")).toMatch(/Apache License[\s\S]*Version 2\.0/);
     const notices = readFileSync(join(ROOT, "THIRD_PARTY_NOTICES.md"), "utf8");
     for (const w of ["Remotion", "Kenney", "CC0", "OpenGameArt", "Open Font License"]) expect(notices).toContain(w);
     const catalog = JSON.parse(readFileSync(join(ROOT, "public/music/catalog.json"), "utf8"));

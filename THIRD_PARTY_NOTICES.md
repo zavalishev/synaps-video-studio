@@ -1,18 +1,18 @@
 # Third-party notices / Сторонние компоненты
 
-Код этого репозитория распространяется по лицензии MIT (`LICENSE`). Ниже — всё стороннее, что
+Код этого репозитория распространяется по лицензии Apache 2.0 (`LICENSE`, `NOTICE`). Ниже — всё стороннее, что
 лежит в репозитории или скачивается при установке и работе, и на каких условиях.
-The code in this repository is MIT-licensed (`LICENSE`). Third-party parts and their terms:
+The code in this repository is licensed under Apache 2.0 (`LICENSE`, `NOTICE`). Third-party parts and their terms:
 
 ## Remotion — собственная лицензия / own license
 
 Студия рендерит ролики на [Remotion](https://www.remotion.dev) (пакеты `remotion`, `@remotion/*`,
-ставятся через npm). У Remotion **не MIT, а собственная лицензия**: бесплатно для физических лиц,
+ставятся через npm). У Remotion **не Apache, а собственная лицензия**: бесплатно для физических лиц,
 некоммерческих организаций и компаний **до 3 сотрудников**; компаниям крупнее нужна платная
-лицензия компании. Условия: <https://www.remotion.dev/license>. Лицензия MIT этого репозитория
+лицензия компании. Условия: <https://www.remotion.dev/license>. Лицензия Apache 2.0 этого репозитория
 на Remotion не распространяется.
 
-Remotion is **not** MIT: free for individuals, non-profits and companies of **up to 3 people**;
+Remotion is **not** Apache-licensed: free for individuals, non-profits and companies of **up to 3 people**;
 larger companies need a company license — <https://www.remotion.dev/license>.
 
 ## Звуки / Sound effects — `public/sfx/`
