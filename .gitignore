@@ -1,0 +1,11 @@
+node_modules/
+.cache/
+jobs/
+out/
+.bundle/
+__pycache__/
+*.pyc
+.env
+.env.*
+*.log
+.DS_Store

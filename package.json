@@ -1,0 +1,44 @@
+{
+  "name": "ai-video-studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agentic short-video studio: Claude Code as the director, Remotion + skills as the crew. Brief in, vertical MP4 out.",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "make": "tsx studio/make.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@react-three/fiber": "9.7.0",
+    "@remotion/bundler": "4.0.436",
+    "@remotion/captions": "4.0.436",
+    "@remotion/google-fonts": "4.0.436",
+    "@remotion/layout-utils": "4.0.436",
+    "@remotion/media-utils": "4.0.436",
+    "@remotion/motion-blur": "4.0.436",
+    "@remotion/noise": "4.0.436",
+    "@remotion/paths": "4.0.436",
+    "@remotion/renderer": "4.0.436",
+    "@remotion/three": "4.0.436",
+    "@remotion/transitions": "4.0.436",
+    "d3-scale": "4.0.2",
+    "d3-shape": "3.2.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "remotion": "4.0.436",
+    "sharp": "0.33.5",
+    "three": "0.185.1"
+  },
+  "devDependencies": {
+    "@types/d3-scale": "4.0.9",
+    "@types/d3-shape": "3.2.0",
+    "@types/node": "22.10.2",
+    "@types/react": "19.2.14",
+    "@types/three": "0.185.4",
+    "tsx": "4.19.2",
+    "typescript": "5.9.3",
+    "vitest": "2.1.8"
+  }
+}

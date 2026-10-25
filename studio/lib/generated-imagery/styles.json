@@ -1,0 +1,84 @@
+{
+  "_about": "Реестр стилей картинок. prompt_suffix — хвост промпта (английский: модель держит стиль точнее), avoid — что дописать в «no …», three_material/bpy_material — подсказка для 3D-скиллов, чтобы 2D и 3D были одним миром. Стартовые точки: директор волен смешивать и менять, решение и «почему» — в theme.json/notes.md.",
+  "styles": [
+    {
+      "id": "soft3d", "ru_label": "Мягкий 3D", "source": "карусель «7 стилей для твоего мультика»",
+      "prompt_suffix": "stylized 3D animation still, rounded shapes, soft materials, soft studio lighting, gentle subsurface scattering, feature-animation look, shallow depth of field",
+      "avoid": "photorealism, harsh shadows, text",
+      "three_material": "MeshPhysicalMaterial({ roughness: 0.55, clearcoat: 0.2, sheen: 0.3 })",
+      "bpy_material": "Principled: roughness 0.55, subsurface 0.15, coat 0.2",
+      "best_for": "герой-персонаж, тёплые истории, продукт с характером"
+    },
+    {
+      "id": "watercolor", "ru_label": "Акварельный", "source": "карусель «7 стилей»",
+      "prompt_suffix": "watercolor illustration, pigment blooms, wet edges, visible textured cold-press paper, loose brush strokes, splashes",
+      "avoid": "3D render, vector, text",
+      "three_material": "плоские плоскости с текстурой-акварелью (MeshBasicMaterial + map), без света",
+      "bpy_material": "Emission с картинкой-акварелью; рендер workbench/flat",
+      "best_for": "сказка, воспоминание, эпоха (плюс цветокор sepia), нежные темы"
+    },
+    {
+      "id": "felt", "ru_label": "Войлочный", "source": "карусель «7 стилей»",
+      "prompt_suffix": "needle-felted wool character, fuzzy fibers, handmade texture, tiny stray hairs catching rim light, miniature diorama, soft daylight, macro photography",
+      "avoid": "plastic, glossy, text",
+      "three_material": "MeshPhysicalMaterial({ roughness: 1, sheen: 1, sheenRoughness: 0.8, sheenColor: '#ffffff' })",
+      "bpy_material": "Principled: roughness 1, sheen 1 (sheen roughness 0.8) + шум в нормаль",
+      "best_for": "уют, дети, ручная работа, малый бизнес «с душой»"
+    },
+    {
+      "id": "clay", "ru_label": "Пластилиновый", "source": "карусель «7 стилей»",
+      "prompt_suffix": "claymation style, hand-sculpted plasticine, visible fingerprints and tool marks, slightly uneven surfaces, saturated colors, stop-motion miniature set lighting",
+      "avoid": "smooth CG, text",
+      "three_material": "MeshStandardMaterial({ roughness: 0.75, metalness: 0 }) + bumpMap шумом",
+      "bpy_material": "Principled: roughness 0.75 + Noise Texture → Bump (strength 0.15)",
+      "best_for": "весёлое объяснение, детская аудитория, игровой тон"
+    },
+    {
+      "id": "drawn2d", "ru_label": "Рисованный 2D", "source": "карусель «7 стилей»",
+      "prompt_suffix": "hand-drawn 2D animation still, clean confident ink outlines, flat colors with simple cel shading, expressive cartoon proportions, painted background",
+      "avoid": "3D render, photo, gradients mess, text",
+      "three_material": "MeshToonMaterial + контур (обратные нормали)",
+      "bpy_material": "Shader to RGB → ColorRamp constant (toon) + Freestyle-линии",
+      "best_for": "юмор, персонажи с эмоцией, быстрый темп"
+    },
+    {
+      "id": "papercut", "ru_label": "Бумажная аппликация", "source": "карусель «7 стилей»",
+      "prompt_suffix": "paper cutout animation style, layered colored construction paper, visible paper grain and cut edges, soft drop shadows between layers, handcrafted diorama",
+      "avoid": "photo, glossy, text",
+      "three_material": "MeshStandardMaterial({ roughness: 1 }) + тонкий bump; слои-плоскости со смещением по z",
+      "bpy_material": "Principled: roughness 1, плоские слои со сдвигом; мягкий area light",
+      "best_for": "сочетается со скиллом paper-2d: генерированные герои в бумажных сценах"
+    },
+    {
+      "id": "pixel", "ru_label": "Пиксельный", "source": "карусель «7 стилей»",
+      "prompt_suffix": "pixel art character, limited color palette, crisp pixel edges, no anti-aliasing, 16-bit game sprite look",
+      "avoid": "blur, gradients, photo, text",
+      "three_material": "текстуры с NearestFilter, MeshBasicMaterial",
+      "bpy_material": "Closest-интерполяция текстур; рендер в малом разрешении и увеличение без сглаживания",
+      "best_for": "игры, техника, ностальгия; в Remotion масштабируйте с image-rendering: pixelated"
+    },
+    {
+      "id": "flat-vector", "ru_label": "Плоский вектор", "source": "доп.",
+      "prompt_suffix": "flat vector illustration, geometric shapes, limited palette, subtle grain, modern editorial explainer style",
+      "avoid": "3D, photo, text",
+      "three_material": "MeshBasicMaterial плоскими цветами",
+      "bpy_material": "Emission плоскими цветами",
+      "best_for": "объяснялки, интерфейсы, иконки к карточкам (explainer-cards)"
+    },
+    {
+      "id": "photo-editorial", "ru_label": "Редакционное фото", "source": "доп.",
+      "prompt_suffix": "editorial photograph, natural window light, shallow depth of field, 35mm, muted film color grade",
+      "avoid": "illustration, text, watermark, logos",
+      "three_material": "MeshPhysicalMaterial под HDRI",
+      "bpy_material": "Principled по реальным значениям, HDRI/area light",
+      "best_for": "фоны «реальной жизни», продукт, интерьер"
+    }
+  ],
+  "roles": {
+    "cutout": "single subject, full body, centered, isolated on a transparent background, no ground, no cast shadow, no text, no frame, generous empty margin around the subject",
+    "prop": "single object, centered, isolated on a transparent background, no text, no logo, no hands, generous empty margin",
+    "backdrop": "environment background only, no characters, no people, no text, no signs with letters, no logos; calm, low-detail area in the lower third (space for captions); main interest in the upper two thirds",
+    "sheet": "character reference sheet on a plain light neutral background: the same character shown full body from front, three-quarter, side and back in one row, plus three head close-ups with neutral, happy and surprised expressions; consistent proportions, colors and outfit; no text, no labels, no grid lines",
+    "same-character": "the exact same character as in the reference image: same face, proportions, colors, materials and outfit"
+  }
+}

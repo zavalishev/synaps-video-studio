@@ -1,0 +1,359 @@
+{
+  "_note": "Референсные системы, НЕ меню и не палитры «на выбор». Каждая — реальный предмет мира с собственной логикой цвета, шрифта и формы. Здесь НЕТ готовых цветов и имён шрифтов: palette_rule — как вывести палитру из предмета брифа, font_voice — голос (studio fonts --suggest <голос>), imagePromptStyle — фактура без цветов (цвета — из своей palette). Берите систему, чей предмет ближе к брифу, или постройте свою; why в theme.json называет предмет, от которого взят цвет. Свободные клетки облика — studio looks.",
+  "presets": [
+    {
+      "id": "risograph-zine",
+      "ru_label": "Ризограф-зин",
+      "reference": "самиздат на ризографе: две краски внахлёст, сдвиг приводки, зерно",
+      "color_logic": "2 плашечные краски + бумага; наложение краски даёт третий цвет; никаких градиентов",
+      "palette_rule": "bg — бумага тиража (светлый или цветной лист, тон из брифа); ink и accent — ДВЕ плашечные краски, обе взяты из предмета брифа (упаковка, вывеска, продукт); третий цвет — их наложение (mixOk), не новая краска",
+      "best_for": "культурное, кофейня с характером, мероприятие, молодая аудитория",
+      "font_voice": {
+        "display": "heavy-grotesk",
+        "caption": "heavy-grotesk",
+        "accent": "hand-marker"
+      },
+      "shapes": {
+        "corner": "none",
+        "shadow": "hard-offset",
+        "border": "none",
+        "plate": "box"
+      },
+      "captions": {
+        "look": "plate",
+        "highlight": "keywords"
+      },
+      "motion": {
+        "temperament": "punchy",
+        "notes": "склейки на ударных словах, сдвиг приводки 2–4 px как акцент"
+      },
+      "material": "flat",
+      "imagePromptStyle": "risograph print, two spot colors overprint (the palette inks), misregistration, grainy paper texture, no text"
+    },
+    {
+      "id": "thermal-receipt",
+      "ru_label": "Чек и накладная",
+      "reference": "кассовый чек, накладная, печать-штамп",
+      "color_logic": "почти монохром: бумага + чёрная термопечать; один цвет-сигнал (красный штамп или зелёный «оплачено»)",
+      "palette_rule": "bg — сама термобумага (тон бумаги брифа: белая, сероватая, желтоватая); ink — термопечать (почти чёрная, тёплая или холодная); accent — один сигнал из жизни чека (штамп, отметка «оплачено», маркер кассира)",
+      "best_for": "деньги, бухгалтерия, «посчитаем», малый бизнес про цифры",
+      "font_voice": {
+        "display": "mono-ledger",
+        "caption": "clean-grotesk",
+        "accent": "slab"
+      },
+      "shapes": {
+        "corner": "torn",
+        "shadow": "soft",
+        "border": "none",
+        "plate": "none"
+      },
+      "captions": {
+        "look": "clean",
+        "highlight": "keywords"
+      },
+      "motion": {
+        "temperament": "lively",
+        "notes": "чек «печатается» строками, штамп — удар без прыжка (scaleStep + звук)"
+      },
+      "material": "paper",
+      "imagePromptStyle": "thermal paper receipt texture, crisp black print, flat lay on desk, top-down, no readable text"
+    },
+    {
+      "id": "chalkboard-menu",
+      "ru_label": "Меловая доска",
+      "reference": "меню кофейни на грифельной доске, мел, рамка",
+      "color_logic": "тёмная матовая доска + белый мел + 1–2 цветных мелка; тёплый свет лампы",
+      "palette_rule": "bg — поверхность доски из места (чёрная, зелёная, графитовая, коричневая); ink — мел; accent — 1–2 цветных мелка, повторяющих цвет главного продукта меню",
+      "best_for": "кафе, пекарня, бар, меню дня, акции заведения",
+      "font_voice": {
+        "display": "hand-marker",
+        "caption": "hand-marker",
+        "accent": "hand-marker"
+      },
+      "shapes": {
+        "corner": "none",
+        "shadow": "none",
+        "border": "rule",
+        "plate": "none"
+      },
+      "captions": {
+        "look": "shadow",
+        "highlight": "keywords"
+      },
+      "motion": {
+        "temperament": "calm",
+        "notes": "текст «пишется» мелом (maskReveal слева направо), пыль мела в луче"
+      },
+      "material": "flat",
+      "imagePromptStyle": "chalkboard texture, chalk drawing, warm cafe light, slight chalk dust, no readable text"
+    },
+    {
+      "id": "neon-sign",
+      "ru_label": "Неоновая вывеска",
+      "reference": "неоновая трубка на кирпичной стене ночью",
+      "color_logic": "тёмный фон, 1 насыщенный светящийся цвет + его ореол; всё остальное приглушено",
+      "palette_rule": "bg — тёмное окружение места (кирпич, асфальт, стекло — не чистый чёрный); accent — цвет трубки ИЗ бренда или продукта; всё остальное приглушено к тону bg",
+      "best_for": "ночь, бар, барбершоп, событие вечером, «открылись»",
+      "font_voice": {
+        "display": "tech",
+        "caption": "heavy-grotesk",
+        "accent": "hand-marker"
+      },
+      "shapes": {
+        "corner": "round",
+        "shadow": "none",
+        "border": "ink-line",
+        "plate": "none"
+      },
+      "captions": {
+        "look": "shadow",
+        "highlight": "active"
+      },
+      "motion": {
+        "temperament": "lively",
+        "notes": "вывеска зажигается по буквам (flashAt), мерцание редкое и короткое"
+      },
+      "material": "flat",
+      "imagePromptStyle": "night street, neon sign glow, wet reflections, moody cinematic light, no readable text"
+    },
+    {
+      "id": "newspaper-clipping",
+      "ru_label": "Газетная вырезка",
+      "reference": "полоса газеты, вырезка с рваным краем, красный маркер",
+      "color_logic": "серо-бежевая бумага, чёрная краска, один красный для пометок; растр точек вместо градиента",
+      "palette_rule": "bg — газетная бумага (бежево-серая, жёлтая от времени); ink — краска печати; accent — один цвет пометки читателя (ручка, маркер), из предмета брифа",
+      "best_for": "новость, «знаете ли вы», разоблачение мифа, факт с цифрой",
+      "font_voice": {
+        "display": "display-serif",
+        "caption": "poster-condensed",
+        "accent": "display-serif"
+      },
+      "shapes": {
+        "corner": "torn",
+        "shadow": "soft",
+        "border": "rule",
+        "plate": "marker-highlight"
+      },
+      "captions": {
+        "look": "clean",
+        "highlight": "keywords"
+      },
+      "motion": {
+        "temperament": "calm",
+        "notes": "камера наезжает на строку, маркер проводится по слову"
+      },
+      "material": "paper",
+      "imagePromptStyle": "halftone newspaper print, grainy offset texture, single ink on newsprint, no readable text"
+    },
+    {
+      "id": "sticker-bomb",
+      "ru_label": "Стикеры",
+      "reference": "ноутбук или витрина, обклеенные стикерами: толстая белая обводка, тень",
+      "color_logic": "насыщенные цвета каждого стикера на нейтральном фоне; белая обводка объединяет",
+      "palette_rule": "bg — нейтральная поверхность, на которую клеят (ноутбук, бетон, картон); каждый стикер — свой насыщенный цвет из предметов брифа; объединяет — обводка цвета bg-контраста",
+      "best_for": "молодёжное, мерч, анонс, много коротких пунктов, детское без сюсюканья",
+      "font_voice": {
+        "display": "quirky-display",
+        "caption": "heavy-grotesk",
+        "accent": "hand-marker"
+      },
+      "shapes": {
+        "corner": "pill",
+        "shadow": "hard-offset",
+        "border": "ink-line",
+        "plate": "sticker"
+      },
+      "captions": {
+        "look": "plate",
+        "highlight": "keywords"
+      },
+      "motion": {
+        "temperament": "punchy",
+        "notes": "стикер «шлёпается» (scaleStep 0.9→1 за 3 кадра + звук), лёгкий наклон ±4°"
+      },
+      "material": "flat",
+      "imagePromptStyle": "die-cut vinyl sticker, thick white border, glossy, bold flat colors, slight drop shadow, no text"
+    },
+    {
+      "id": "swiss-poster",
+      "ru_label": "Швейцарский плакат",
+      "reference": "типографский плакат: сетка, огромная цифра, флеш-лево",
+      "color_logic": "один насыщенный фон-цвет + чёрный + белый; цвет несёт смысл, а не украшает",
+      "palette_rule": "bg — ОДИН насыщенный цвет-поле, который несёт смысл предмета брифа (цвет продукта, сигнал, сезон); ink — чёрный или белый по контрасту; accent — не нужен или третий нейтральный",
+      "best_for": "цифра-герой, факт, экспертный контент, B2B без скуки",
+      "font_voice": {
+        "display": "heavy-grotesk",
+        "caption": "heavy-grotesk",
+        "mono": "mono-ledger"
+      },
+      "shapes": {
+        "corner": "none",
+        "shadow": "none",
+        "border": "rule",
+        "plate": "bar"
+      },
+      "captions": {
+        "look": "clean",
+        "highlight": "active"
+      },
+      "motion": {
+        "temperament": "lively",
+        "notes": "шрифт — герой: цифра во всю ширину, смена кегля на склейке, никаких плашек"
+      },
+      "material": "flat",
+      "imagePromptStyle": "minimal swiss poster aesthetic, bold flat color field, strong grid, high contrast, no text"
+    },
+    {
+      "id": "brutalist-type",
+      "ru_label": "Большой шрифт",
+      "reference": "текст во весь экран, как заголовок таблоида: слово = кадр",
+      "color_logic": "два полюса контраста + один сигнал; контраст максимальный, цвет сигнала — смысл, а не жанр",
+      "palette_rule": "почти монохром: bg и ink — два полюса контраста в тоне предмета (не обязательно чёрный/белый: бумага и графит, бетон и сажа); accent — один сигнальный цвет ИЗ обещания ролика, а не «кислотный по умолчанию»",
+      "best_for": "крючок, сильное утверждение, мотивация, короткий ролик до 15 с",
+      "font_voice": {
+        "display": "poster-condensed",
+        "caption": "poster-condensed"
+      },
+      "shapes": {
+        "corner": "none",
+        "shadow": "none",
+        "border": "none",
+        "plate": "none"
+      },
+      "captions": {
+        "look": "clean",
+        "highlight": "active",
+        "uppercase": true
+      },
+      "motion": {
+        "temperament": "punchy",
+        "notes": "одно слово на склейку, кегль 15–25 % высоты, картинка внутри букв (маска)"
+      },
+      "material": "flat",
+      "imagePromptStyle": "high contrast duotone photo (palette poles), gritty, dramatic, no text"
+    },
+    {
+      "id": "paper-cut",
+      "ru_label": "Бумажная аппликация",
+      "reference": "аппликация из цветного картона: слои, рваный край, тень между листами",
+      "color_logic": "3–4 цвета картона из предмета истории + бумага; тень между слоями даёт глубину",
+      "palette_rule": "3–4 цвета картона — из предметов истории (продукт, место, герой) + бумага-фон; тень между слоями даёт глубину",
+      "best_for": "малый бизнес, объяснение «как это работает», дружелюбный тон, дешёвый рендер (2D)",
+      "font_voice": {
+        "display": "hand-marker",
+        "caption": "heavy-grotesk"
+      },
+      "shapes": {
+        "corner": "torn",
+        "shadow": "soft",
+        "border": "none",
+        "plate": "none"
+      },
+      "captions": {
+        "look": "plate",
+        "highlight": "keywords"
+      },
+      "motion": {
+        "temperament": "calm",
+        "notes": "карточки входят снизу за 12–16 кадров, фон — медленный наезд 3–6 % (это «не мёртвый» фон, а не смена плана)"
+      },
+      "material": "paper",
+      "three_material": "MeshStandardMaterial roughness 1, тонкий шумовой бамп",
+      "bpy_material": "Principled roughness 0.95, Noise Texture → Bump 0.05",
+      "imagePromptStyle": "paper cutout illustration, layered colored craft paper, subtle paper grain, soft warm studio light, gentle drop shadows, no text"
+    },
+    {
+      "id": "night-felt",
+      "ru_label": "Ночной войлок",
+      "reference": "войлочная игрушка, вышивка, ночник",
+      "color_logic": "глубокий тёмный фон + тёплые светящиеся акценты",
+      "palette_rule": "bg — глубокий тон ночи этого места (синий, сливовый, бутылочный, коричневый); accent — тёплый свет практических источников мира (окно, фонарь, огонёк), его тон — из предмета брифа",
+      "best_for": "сказка, детское, уют, история с настроением; 3D-диорама с тёплым светом",
+      "font_voice": {
+        "display": "rounded-kid",
+        "accent": "warm-serif",
+        "caption": "warm-serif"
+      },
+      "shapes": {
+        "corner": "round",
+        "shadow": "soft",
+        "border": "none",
+        "plate": "none"
+      },
+      "captions": {
+        "look": "shadow",
+        "highlight": "active"
+      },
+      "motion": {
+        "temperament": "still",
+        "notes": "почти статично, наезд 3–8 % за сцену, склейка на слове"
+      },
+      "material": "felt",
+      "three_material": "MeshPhysicalMaterial roughness 1, sheen 1, sheenRoughness 0.8, шумовая normalMap",
+      "bpy_material": "Principled roughness 1, Sheen 0.8, Noise → Bump 0.15",
+      "imagePromptStyle": "needle-felted wool, fuzzy fibers, handmade stitched texture, cozy miniature diorama, warm practical lights against deep night (palette tones), shallow depth of field, no text"
+    },
+    {
+      "id": "lowpoly-diorama",
+      "ru_label": "Лоу-поли диорама",
+      "reference": "настольная диорама-игрушка, вид сверху под углом",
+      "color_logic": "цвета приходят из погоды и времени суток (scene-state), фон — небо-градиент, а не плоская заливка",
+      "palette_rule": "цвета приходят из погоды и времени суток (scene-state) и материалов места; фон — небо-градиент, а не плоская заливка",
+      "best_for": "места, погода, город, процесс в пространстве; один непрерывный дубль с орбитой",
+      "font_voice": {
+        "display": "clean-grotesk",
+        "caption": "clean-grotesk",
+        "mono": "mono-ledger"
+      },
+      "shapes": {
+        "corner": "small",
+        "shadow": "soft",
+        "border": "none",
+        "plate": "box"
+      },
+      "captions": {
+        "look": "plate",
+        "highlight": "keywords"
+      },
+      "motion": {
+        "temperament": "calm",
+        "notes": "орбита ≤ 12°/с, без склеек внутри дубля"
+      },
+      "material": "lowpoly",
+      "three_material": "MeshStandardMaterial flatShading, roughness 0.85",
+      "bpy_material": "Principled roughness 0.8, flat shading, без текстур",
+      "imagePromptStyle": "stylized low-poly 3D diorama, soft clay-like shading, flat material colors, gentle ambient occlusion, toy miniature, no text"
+    },
+    {
+      "id": "clay-soft3d",
+      "ru_label": "Мягкий 3D / пластилин",
+      "reference": "пластилиновая анимация, отпечатки пальцев",
+      "color_logic": "пастель предмета + один насыщенный цвет героя",
+      "palette_rule": "bg — пастель предмета или его окружения; accent — один насыщенный цвет героя",
+      "best_for": "персонаж, товар-игрушка, детская тема, весёлое объяснение",
+      "font_voice": {
+        "display": "rounded-kid",
+        "caption": "rounded-kid"
+      },
+      "shapes": {
+        "corner": "pill",
+        "shadow": "soft",
+        "border": "none",
+        "plate": "sticker"
+      },
+      "captions": {
+        "look": "outline",
+        "highlight": "active"
+      },
+      "motion": {
+        "temperament": "lively",
+        "notes": "сквош-стретч без перелёта позиции; камера мягко дышит"
+      },
+      "material": "clay",
+      "three_material": "MeshPhysicalMaterial roughness 0.85, sheen 0.3",
+      "bpy_material": "Principled roughness 0.85, Subsurface 0.05",
+      "imagePromptStyle": "claymation style, hand-sculpted clay, visible fingerprints, soft rounded shapes, soft studio light, pastel backdrop, no text"
+    }
+  ]
+}

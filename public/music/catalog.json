@@ -1,0 +1,182 @@
+{
+ "tracks": [
+  {
+   "id": "lofi-chill",
+   "file": "lofi-chill.mp3",
+   "mood": [
+    "calm",
+    "cozy",
+    "lofi",
+    "cafe",
+    "study"
+   ],
+   "energy": 2,
+   "durSec": 123.2,
+   "loop": false,
+   "license": "CC0",
+   "source": "https://opengameart.org/content/chill-lofi-inspired",
+   "author": "omfgdude"
+  },
+  {
+   "id": "bossa-8bit",
+   "file": "bossa-8bit.mp3",
+   "mood": [
+    "playful",
+    "light",
+    "retro",
+    "cafe"
+   ],
+   "energy": 3,
+   "durSec": 59.6,
+   "loop": false,
+   "license": "CC0",
+   "source": "https://opengameart.org/content/bossa-nova",
+   "author": "joth"
+  },
+  {
+   "id": "kids-lullaby",
+   "file": "kids-lullaby.mp3",
+   "mood": [
+    "kids",
+    "tender",
+    "lullaby",
+    "story"
+   ],
+   "energy": 2,
+   "durSec": 39.5,
+   "loop": false,
+   "license": "CC0",
+   "source": "https://opengameart.org/content/happy-lullaby-song17",
+   "author": "cynicmusic"
+  },
+  {
+   "id": "calm-uplifting",
+   "file": "calm-uplifting.mp3",
+   "mood": [
+    "uplifting",
+    "hopeful",
+    "explainer",
+    "corporate-light"
+   ],
+   "energy": 3,
+   "durSec": 84.6,
+   "loop": false,
+   "license": "CC0",
+   "source": "https://opengameart.org/content/the-field-of-dreams",
+   "author": "pauliuw"
+  },
+  {
+   "id": "winter-calm",
+   "file": "winter-calm.mp3",
+   "mood": [
+    "winter",
+    "calm",
+    "magical",
+    "weather"
+   ],
+   "energy": 2,
+   "durSec": 60.8,
+   "loop": false,
+   "license": "CC0",
+   "source": "https://opengameart.org/content/snowfall",
+   "author": "kistol"
+  },
+  {
+   "id": "warm-gentle",
+   "file": "warm-gentle.mp3",
+   "mood": [
+    "warm",
+    "gentle",
+    "romantic",
+    "product"
+   ],
+   "energy": 2,
+   "durSec": 83.5,
+   "loop": false,
+   "license": "CC0",
+   "source": "https://opengameart.org/content/next-to-you",
+   "author": "joth"
+  },
+  {
+   "id": "upbeat-warped",
+   "file": "upbeat-warped.mp3",
+   "mood": [
+    "upbeat",
+    "modern",
+    "promo",
+    "energetic"
+   ],
+   "energy": 5,
+   "durSec": 114.1,
+   "loop": false,
+   "license": "CC0",
+   "source": "https://opengameart.org/content/free-music-pack",
+   "author": "tricksntraps"
+  },
+  {
+   "id": "amb-rain-night",
+   "file": "amb-rain-night.mp3",
+   "mood": [
+    "ambience",
+    "rain",
+    "night",
+    "weather"
+   ],
+   "energy": 1,
+   "durSec": 278.8,
+   "loop": false,
+   "license": "CC0",
+   "source": "https://opengameart.org/content/rain-and-thunders",
+   "author": "kindland"
+  },
+  {
+   "id": "cozy-town",
+   "file": "cozy-town.mp3",
+   "mood": [
+    "cozy",
+    "town",
+    "friendly",
+    "kids",
+    "story"
+   ],
+   "energy": 3,
+   "durSec": 97.5,
+   "loop": false,
+   "license": "CC0",
+   "source": "https://opengameart.org/content/town-theme-rpg",
+   "author": "cynicmusic"
+  },
+  {
+   "id": "upbeat-electronic",
+   "file": "upbeat-electronic.mp3",
+   "mood": [
+    "upbeat",
+    "electronic",
+    "tech",
+    "promo"
+   ],
+   "energy": 5,
+   "durSec": 47.7,
+   "loop": false,
+   "license": "CC0",
+   "source": "https://opengameart.org/content/menu-music",
+   "author": "mrpoly"
+  },
+  {
+   "id": "playful-tiki",
+   "file": "playful-tiki.mp3",
+   "mood": [
+    "playful",
+    "quirky",
+    "kids",
+    "summer"
+   ],
+   "energy": 3,
+   "durSec": 117.4,
+   "loop": false,
+   "license": "CC0",
+   "source": "https://opengameart.org/content/enchanted-tiki-86",
+   "author": "cynicmusic"
+  }
+ ]
+}

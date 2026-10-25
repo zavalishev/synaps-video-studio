@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["bin", "lib", "make.ts", "template/src", "skills/**/*.ts", "skills/**/*.tsx"],
+  "exclude": ["skills/**/examples/**"]
+}

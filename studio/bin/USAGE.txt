@@ -1,0 +1,85 @@
+studio <инструмент> [аргументы]      — запускать из папки ролика jobs/<slug> (или --job <dir>)
+Пути аргументов — от папки ролика. Файлы для кадра лежат в public/ и берутся staticFile("…").
+
+  studio voice lines.json [--voice onyx] [--style "указания диктору"] [--pace 1.0] [--gap 0.25]
+               [--head 0.3] [--lang ru] [--model gpt-4o-mini-tts] [--out voice.wav] [--keep-duration] [--estimate]
+      --estimate — бесплатно, без озвучки: оценка длины по тексту (±10 %) — до платного прогона.
+      реплики → public/voice.wav (48 кГц моно) + public/words.json (слова с таймингами, секунды;
+      captions[] для @remotion/captions). lines.json: ["…","…"] или
+      {"voice","style","pace","gap","lines":["…",{"id","say","pace","before","after","style","voice"}]}.
+      Платно (TTS через подключённого провайдера), кэш .cache/tts. job.json переключается на длину от аудио.
+      Голоса gpt-4o-mini-tts: alloy ash ballad coral echo fable onyx nova sage shimmer verse.
+
+  studio image "промпт" [--out img/x.png] [--size 1024x1024|1024x1536|1536x1024|auto]
+               [--quality low|medium|high] [--bg transparent|opaque|auto] [--prompt-file f] [--force]
+               [--ref img/sheet.png[,img/b.png]]
+      картинка через подключённого провайдера → public/<out>, манифест public/images.json. Платно, кэш.
+      --ref — референсы (лист персонажа, образец стиля): тот же герой в новой позе/сцене.
+      ~50 с на картинку (low). Реальный размер может отличаться от --size (печатается);
+      не та ориентация — один автоповтор с явной композицией (--no-retry — без него).
+
+  studio blender script.py [--out public/3d/x.png] [--timeout 600] [-- --width 1080 --height 1920
+               --samples 32 --engine eevee|cycles|workbench --transparent --seed 1 --frames 1-120 …]
+      Blender 5.2.3 без окна; в скрипте `import sx` (studio/lib/blender/sx.py). Скрипт получает
+      --out <абсолютный путь> и всё после «--». EEVEE-кадр 540×960 ≈ 2 с.
+
+  studio still [--frames 0,mid,last,2.5s,40-45] [--every 30] [--scale 0.5] [--out out/stills]
+               [--props '{…}'|file] [--probe] [--gl angle|swangle] [--sheet] [--vary 'ключ=a,b,c']
+      кадры → out/stills/fNNNN.png. --sheet — сразу одним листом (одна Read). --vary — те же кадры
+      для каждого значения inputProps.ключ, по столбцу на значение. --probe: рамки страховки.
+
+  studio render [--out out/final.mp4] [--scale 1] [--crf 18] [--concurrency N] [--frames a-b]
+               [--props …] [--probe] [--gl angle] [--no-loudnorm] [--audio-only]
+      --audio-only — только звук (sfx.json, громкость музыки): новая дорожка к готовому mp4 за секунды.
+      H.264 + AAC, громкость −14 LUFS (два прохода); нарушения страховки → <имя>.guard.json.
+      Черновик: --scale 0.5 --out out/draft.mp4. 3D — --concurrency 3.
+
+  studio sheet <mp4|папка|png…> [--n 12] [--cols 4] [--width 270] [--frames 40-45|0,30,60] [--out f.png]
+      контактный лист / лента движения с номерами кадров и временем.
+
+  studio probe <mp4> [--cuts 0,120,240] [--json] [--strict] [--words public/words.json]
+      пиксельная проверка: склейки и их частота, быстрое движение (>0.6 %W/кадр), тряска,
+      блюр-переходы, предмет уезжает через край, фон не покрывает кадр, чёрные кадры,
+      громкость и дыры в звуке; лента: застой под речью, слабое открытие (кадр 0, первые
+      1.5 с), пустые трети, стоящий финал; + отчёт страховки рендера. PASS/WARN/FAIL.
+
+  studio check
+      tsc --noEmit по ролику + запрет недетерминизма (Math.random, Date.now, useFrame, CSS-анимации).
+
+  studio sfx [семейство|поиск] | studio sfx --copy pop1,whoosh2
+      каталог звуков (CC0); --copy кладёт в public/sfx/ ролика.
+
+  studio music [настроение] [--bpm 90-110] [--energy 3-5] | studio music --copy id
+      каталог лицензированной музыки владельца (public/music/catalog.json). Пуст — музыка
+      открытым вопросом в notes.md; атмосфера места — bed.ts (sound-design).
+
+  studio api <модуль> [имя]
+      короткие подписи экспортов @studio/<модуль> (props компонентов, аргументы функций) —
+      вместо чтения исходников. Модули: studio (корень @studio), three, three-d и папки скиллов.
+
+  studio fonts [поиск] [--rebuild] | studio fonts --suggest <голос> [--seed slug]
+      293 семейства Google Fonts с кириллицей: имя, модуль @remotion/google-fonts/<Mod>, веса.
+      --suggest: 6 вариантов под голос шрифта (poster-condensed, heavy-grotesk, warm-serif,
+      display-serif, hand-marker, slab, mono-ledger, rounded-kid, tech, quirky-display,
+      clean-grotesk), порядок перемешан под ролик; частые в последних роликах помечены —
+      и семейство, и голос («poster-condensed — голос 3 из 8 последних»).
+
+  studio looks [--n 10] | studio looks --note "что видит зритель"
+      облик последних роликов ДО выбора направлений: занятые и СВОБОДНЫЕ клетки (светлота фона
+      × тон акцента), «дом студии» (клетка, подача, голос шрифта), журнал облика соседей и лист
+      out/recent-looks.png (кадр 0 соседей). --note — дописать свой облик в журнал студии.
+
+  studio skill [имя …] [--section раздел] [--full]
+      карточка скилла (когда, API, ловушки) вместо всего SKILL.md; без имени — список скиллов.
+
+  studio facts [brief.md]
+      факты брифа (бесплатно): даты против дней недели (ближайший год), прошедшие даты, числа,
+      которые можно показывать дословно, похожа ли категория на регулируемую (медицина, БАД,
+      финансы, алкоголь, дети). review.ts повторяет эти проверки и сверяет числа речи/экрана.
+
+  studio new <slug> [--brief f|"текст"] [--width --height --fps] [--brand dir]
+      папка ролика из шаблона без запуска директора.
+
+Запуск директора целиком: npx tsx studio/make.ts --brief brief.md [--slug s] [--size 1080x1920]
+  [--author "@handle"] [--brand dir] [--phases 2|1] [--budget-usd 4] [--budget-min 15] [--max-budget-usd 6]
+  [--model …] [--finish-model …] [--effort …] [--finish-effort …]

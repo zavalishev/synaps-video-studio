@@ -1,0 +1,15 @@
+#!/bin/sh
+# Инструменты студии: studio <инструмент> [аргументы]. Список — studio help.
+# Запускаются из папки ролика (jobs/<slug>) или с --job <dir>. node_modules — из корня репо.
+SELF="$0"; while [ -L "$SELF" ]; do SELF="$(readlink "$SELF")"; done
+BIN="$(cd "$(dirname "$SELF")" && pwd)"
+ROOT="$(cd "$BIN/../.." && pwd)"
+TSX="$ROOT/node_modules/.bin/tsx"
+tool="$1"; [ $# -gt 0 ] && shift
+case "$tool" in
+  voice|image|blender|still|sheet|render|sfx|music|probe|check|fonts|new|api|skill|facts|looks)
+    exec "$TSX" "$BIN/$tool.ts" "$@" ;;
+  ""|help|-h|--help)
+    sed -n '1,200p' "$BIN/USAGE.txt" ;;
+  *) echo "studio: неизвестный инструмент «$tool» (studio help)" >&2; exit 2 ;;
+esac

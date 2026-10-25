@@ -1,0 +1,45 @@
+{
+  "_about": "Стартовые значения слоя «Wetter»: время суток (база), погода (поправки), сезон (перекраска групп). Не догма — директор переопределяет любое поле через overrides. Цвета sRGB hex; sunElevation/Azimuth — градусы; intensity — условные единицы three (Blender: energy ≈ intensity × 1.4).",
+  "time": {
+    "dawn": {
+      "skyTop": "#5d6fa8", "skyBottom": "#f2b8a2", "sunColor": "#ffb990", "sunIntensity": 1.6, "sunElevation": 8, "sunAzimuth": -65,
+      "hemiSky": "#a8b4dc", "hemiGround": "#6e5c5c", "hemiIntensity": 0.75, "fogColor": "#e7c4b9", "fog": 0.18,
+      "exposure": -0.1, "saturation": 0.95, "windowGlow": 0.35, "stars": 0.12, "moon": 0, "water": "#6f8fc0", "grade": "#ffb48a", "gradeAmount": 0.12
+    },
+    "day": {
+      "skyTop": "#4f9be3", "skyBottom": "#cfe9f8", "sunColor": "#fff3dc", "sunIntensity": 3.0, "sunElevation": 52, "sunAzimuth": -35,
+      "hemiSky": "#bfe0ff", "hemiGround": "#8a7a5c", "hemiIntensity": 1.1, "fogColor": "#d7ebf7", "fog": 0.08,
+      "exposure": 0, "saturation": 1.0, "windowGlow": 0, "stars": 0, "moon": 0, "water": "#2fa8c8", "grade": "#ffffff", "gradeAmount": 0
+    },
+    "golden": {
+      "skyTop": "#6a9ad6", "skyBottom": "#ffd29a", "sunColor": "#ffc27a", "sunIntensity": 2.6, "sunElevation": 16, "sunAzimuth": 55,
+      "hemiSky": "#c9d6f0", "hemiGround": "#8a6a4a", "hemiIntensity": 0.9, "fogColor": "#f5d7b2", "fog": 0.12,
+      "exposure": 0, "saturation": 1.08, "windowGlow": 0.1, "stars": 0, "moon": 0, "water": "#4f9ac0", "grade": "#ffc07a", "gradeAmount": 0.14
+    },
+    "evening": {
+      "skyTop": "#4a4f8f", "skyBottom": "#f59a8a", "sunColor": "#ff9a62", "sunIntensity": 2.0, "sunElevation": 5, "sunAzimuth": 70,
+      "hemiSky": "#b5a2d8", "hemiGround": "#6a5060", "hemiIntensity": 0.9, "fogColor": "#d8a2a8", "fog": 0.16,
+      "exposure": -0.15, "saturation": 1.0, "windowGlow": 0.6, "stars": 0.2, "moon": 0.3, "water": "#6a5f9e", "grade": "#e48a9a", "gradeAmount": 0.18
+    },
+    "night": {
+      "skyTop": "#0d1638", "skyBottom": "#2a3a72", "sunColor": "#9db4ff", "sunIntensity": 0.8, "sunElevation": 38, "sunAzimuth": -45,
+      "hemiSky": "#4a62a8", "hemiGround": "#22223a", "hemiIntensity": 0.75, "fogColor": "#22305e", "fog": 0.12,
+      "exposure": -0.2, "saturation": 0.8, "windowGlow": 1, "stars": 1, "moon": 1, "water": "#2a4580", "grade": "#2c3c8a", "gradeAmount": 0.45
+    }
+  },
+  "weather": {
+    "clear":  { "clouds": 0.15, "cloudTint": "#ffffff", "sunMul": 1, "hemiMul": 1, "skyMix": "#ffffff", "skyMixAmt": 0, "fogAdd": 0, "rain": 0, "snow": 0, "starsMul": 1, "satMul": 1 },
+    "cloudy": { "clouds": 0.75, "cloudTint": "#e6ebf1", "sunMul": 0.45, "hemiMul": 1.05, "skyMix": "#a3adbb", "skyMixAmt": 0.5, "fogAdd": 0.08, "rain": 0, "snow": 0, "starsMul": 0.2, "satMul": 0.8 },
+    "fog":    { "clouds": 0.3, "cloudTint": "#e9edf2", "sunMul": 0.35, "hemiMul": 1.1, "skyMix": "#c9d0d8", "skyMixAmt": 0.65, "fogAdd": 0.55, "rain": 0, "snow": 0, "starsMul": 0, "satMul": 0.65 },
+    "rain":   { "clouds": 0.9, "cloudTint": "#b8c2cf", "sunMul": 0.3, "hemiMul": 0.9, "skyMix": "#7d8796", "skyMixAmt": 0.6, "fogAdd": 0.18, "rain": 0.7, "snow": 0, "starsMul": 0, "satMul": 0.7 },
+    "storm":  { "clouds": 1, "cloudTint": "#6f6a86", "sunMul": 0.15, "hemiMul": 0.7, "skyMix": "#4a4660", "skyMixAmt": 0.75, "fogAdd": 0.2, "rain": 1, "snow": 0, "starsMul": 0, "satMul": 0.6 },
+    "snow":   { "clouds": 0.8, "cloudTint": "#eef2f6", "sunMul": 0.5, "hemiMul": 1.15, "skyMix": "#d5dce5", "skyMixAmt": 0.55, "fogAdd": 0.2, "rain": 0, "snow": 0.8, "starsMul": 0.1, "satMul": 0.75 }
+  },
+  "season": {
+    "spring": { "foliage": "#86c96a", "ground": "#93cf72", "accent": "#f6a8c6", "snowCover": 0 },
+    "summer": { "foliage": "#4fa65a", "ground": "#7cc45e", "accent": "#ffd166", "snowCover": 0 },
+    "autumn": { "foliage": "#e2862f", "ground": "#b9b25a", "accent": "#d64b2a", "snowCover": 0 },
+    "winter": { "foliage": "#5f8a7a", "ground": "#e9eef3", "accent": "#c9372c", "snowCover": 0.85 }
+  },
+  "snowColor": "#f2f5f9"
+}

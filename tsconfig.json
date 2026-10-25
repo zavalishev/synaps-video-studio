@@ -1,0 +1,6 @@
+{
+  "extends": "./studio/tsconfig.json",
+  "compilerOptions": { "baseUrl": "studio" },
+  "include": ["studio/bin", "studio/lib", "studio/make.ts", "studio/template/src", "studio/skills/**/*.ts", "studio/skills/**/*.tsx", "tests"],
+  "exclude": ["studio/skills/**/examples/**"]
+}

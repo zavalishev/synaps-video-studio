@@ -1,0 +1,144 @@
+{
+ "sounds": [
+  {
+   "id": "coin1",
+   "family": "coin",
+   "durSec": 0.2559
+  },
+  {
+   "id": "coin2",
+   "family": "coin",
+   "durSec": 0.2271
+  },
+  {
+   "id": "coins",
+   "family": "coins",
+   "durSec": 0.8455
+  },
+  {
+   "id": "drop1",
+   "family": "drop",
+   "durSec": 0.1151
+  },
+  {
+   "id": "drop2",
+   "family": "drop",
+   "durSec": 0.1804
+  },
+  {
+   "id": "flip1",
+   "family": "flip",
+   "durSec": 0.7686
+  },
+  {
+   "id": "flip2",
+   "family": "flip",
+   "durSec": 0.4304
+  },
+  {
+   "id": "flip3",
+   "family": "flip",
+   "durSec": 0.2306
+  },
+  {
+   "id": "letter1",
+   "family": "letter",
+   "durSec": 0.0995
+  },
+  {
+   "id": "letter2",
+   "family": "letter",
+   "durSec": 0.1617
+  },
+  {
+   "id": "marker1",
+   "family": "marker",
+   "durSec": 0.1393
+  },
+  {
+   "id": "marker2",
+   "family": "marker",
+   "durSec": 0.1393
+  },
+  {
+   "id": "pop1",
+   "family": "pop",
+   "durSec": 0.6891
+  },
+  {
+   "id": "pop2",
+   "family": "pop",
+   "durSec": 0.4565
+  },
+  {
+   "id": "pop3",
+   "family": "pop",
+   "durSec": 0.8835
+  },
+  {
+   "id": "pop4",
+   "family": "pop",
+   "durSec": 0.6008
+  },
+  {
+   "id": "slide1",
+   "family": "slide",
+   "durSec": 0.6008
+  },
+  {
+   "id": "slide2",
+   "family": "slide",
+   "durSec": 0.5841
+  },
+  {
+   "id": "slide3",
+   "family": "slide",
+   "durSec": 0.5981
+  },
+  {
+   "id": "stamp1",
+   "family": "stamp",
+   "durSec": 0.649
+  },
+  {
+   "id": "stamp2",
+   "family": "stamp",
+   "durSec": 0.3101
+  },
+  {
+   "id": "step1",
+   "family": "step",
+   "durSec": 0.2714
+  },
+  {
+   "id": "step2",
+   "family": "step",
+   "durSec": 0.2487
+  },
+  {
+   "id": "step3",
+   "family": "step",
+   "durSec": 0.2485
+  },
+  {
+   "id": "tick1",
+   "family": "tick",
+   "durSec": 0.045
+  },
+  {
+   "id": "tick2",
+   "family": "tick",
+   "durSec": 0.0203
+  },
+  {
+   "id": "whoosh1",
+   "family": "whoosh",
+   "durSec": 0.661
+  },
+  {
+   "id": "whoosh2",
+   "family": "whoosh",
+   "durSec": 0.4151
+  }
+ ]
+}
