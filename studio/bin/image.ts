@@ -1,4 +1,4 @@
-// Картинка через провайдера из .env (IMAGE_PROVIDER = openai | gemini | command | none) → PNG в public/.
+// Картинка через провайдера из .env (IMAGE_PROVIDER = openai | gemini | codex | command | none) → PNG в public/.
 //   studio image "промпт" [--out img/hero.png] [--size 1024x1024|1024x1536|1536x1024|auto]
 //                [--quality low|medium|high] [--bg transparent|opaque|auto] [--prompt-file p.txt]
 //                [--force] [--job dir] [--ref img/sheet.png[,img/b.png]] [--no-retry]

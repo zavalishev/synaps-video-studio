@@ -58,17 +58,19 @@ export const ENV_FILE = process.env.STUDIO_ENV_FILE ?? join(ROOT_DIR, ".env");
 export const DOTENV_KEYS: string[] =
   process.env.STUDIO_DOTENV === "0" || process.env.VITEST ? [] : loadDotenv(ENV_FILE);
 
-// Окружение режиссёра (claude -p из make.ts): без ключей, пришедших из .env (инструменты студии
+// Окружение режиссёра (claude -p или codex exec из make.ts): без ключей, пришедших из .env (инструменты студии
 // перечитают .env сами), без похожих на ключи переменных из окружения оболочки (OPENAI_API_KEY,
 // GITHUB_TOKEN… из ~/.zshrc — одна команда env, и ключ в контексте модели и в director.log),
-// и без переменных родительской сессии Claude Code — при запуске из интерактивного claude
-// (скилл make-video) вложенный claude -p иначе считает себя частью чужой сессии.
-// Авторизация Claude Code (подписка, CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_*, Bedrock/Vertex) остаётся.
+// и без переменных родительской сессии Claude Code или Codex — при запуске из интерактивного
+// claude/codex (скилл make-video) вложенный агент иначе считает себя частью чужой сессии
+// (или песочницы: CODEX_SANDBOX*).
+// Авторизация агентов (подписка, CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_*, Bedrock/Vertex; CODEX_HOME,
+// CODEX_API_KEY) остаётся.
 // Director env: drops .env keys, key-like shell variables and parent Claude Code session variables;
 // keeps Claude Code's own auth.
-const PARENT_SESSION = /^(CLAUDECODE|CLAUDE_PID|CLAUDE_AGENT_SDK_VERSION|CLAUDE_CODE_(ENTRYPOINT|SESSION_\w+|CHILD_SESSION|MESSAGING_\w+|SSE_PORT|EXECPATH))$/;
+const PARENT_SESSION = /^(CLAUDECODE|CLAUDE_PID|CLAUDE_AGENT_SDK_VERSION|CLAUDE_CODE_(ENTRYPOINT|SESSION_\w+|CHILD_SESSION|MESSAGING_\w+|SSE_PORT|EXECPATH)|CODEX_SANDBOX\w*|CODEX_THREAD_ID)$/;
 const KEY_LIKE = /(_API_KEY|_KEY|_TOKEN|_SECRET|PASSWORD|_PASS)$/i;
-const CLAUDE_AUTH = /^(ANTHROPIC_\w+|CLAUDE_CODE_OAUTH_TOKEN|AWS_\w+|CLOUD_ML_REGION|VERTEX_\w+|GOOGLE_APPLICATION_CREDENTIALS|GOOGLE_CLOUD_PROJECT)$/;
+const CLAUDE_AUTH = /^(ANTHROPIC_\w+|CLAUDE_CODE_OAUTH_TOKEN|AWS_\w+|CLOUD_ML_REGION|VERTEX_\w+|GOOGLE_APPLICATION_CREDENTIALS|GOOGLE_CLOUD_PROJECT|CODEX_API_KEY)$/;
 export const isShellSecret = (k: string) => !CLAUDE_AUTH.test(k) && (SECRET_VARS.includes(k) || KEY_LIKE.test(k));
 export const directorEnv = (env: NodeJS.ProcessEnv, dotenvKeys: string[]): Record<string, string> =>
   Object.fromEntries(Object.entries(env).filter((e): e is [string, string] =>

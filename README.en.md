@@ -1,8 +1,9 @@
 # Synaps Video Studio
 
 **An agentic AI motion-design studio for short vertical videos: Reels, Shorts, TikTok.**
-You write a brief, Claude Code runs as the director on your own subscription, and you get a
-finished MP4.
+You write a brief, an AI agent runs as the director on your own subscription, and you get a
+finished MP4. The director can be **Claude Code** (Claude subscription) or **Codex** (ChatGPT
+subscription) — use whichever you have.
 
 > Made by the Synaps team — [synapschat.com](https://synapschat.com)
 
@@ -16,7 +17,8 @@ not ready-made recipes.
 
 You bring your own voice and image providers: OpenAI, ElevenLabs (including your own cloned
 voice), Google Gemini, or any program of your own such as Kimi-Audio, Piper, Silero or ComfyUI.
-You can also connect nothing. You then get a video without narration or generated images, built
+With a ChatGPT subscription, Codex can generate the images for free — no API key. You can also
+connect nothing. You then get a video without narration or generated images, built
 from music, on-screen text, code-drawn graphics and Blender 3D.
 
 > The studio's guide, skills and tool messages are written in Russian, and Russian is the
@@ -43,30 +45,41 @@ avoids repeating the same typeface and palette.
 
 ## Quick start
 
-You need macOS (primary platform) or Linux, Node 22+ (tested on 24, see `.nvmrc`), ffmpeg,
-[Claude Code](https://claude.com/claude-code) with a Claude Pro or Max subscription, and an
-internet connection (rendering fetches Google Fonts). On a Mac, install
+You need macOS (primary platform) or Linux, Node 22+ (tested on 24, see `.nvmrc`), ffmpeg, an
+internet connection (rendering fetches Google Fonts) and **one of the agents**:
+
+- [Claude Code](https://claude.com/claude-code) with a Claude Pro or Max subscription;
+- [Codex CLI](https://github.com/openai/codex) with a ChatGPT Plus or Pro subscription.
+
+You can install both and pick per video. On a Mac, install
 [Homebrew](https://brew.sh) first if you don't have it: it also installs the Xcode Command Line
 Tools that `git` needs.
 
 ```bash
 # 1. Tools (Linux: see below)
 brew install node ffmpeg
+# the agent — one or both:
 curl -fsSL https://claude.ai/install.sh | bash   # Claude Code; installs to ~/.local/bin — add it to PATH if `claude` isn't found
+npm i -g @openai/codex                           # Codex CLI
 
 # 2. The studio
 git clone https://github.com/zavalishev/synaps-video-studio && cd synaps-video-studio
 npm run setup                                    # packages, tool check, .env, whisper model, doctor
 
-# 3. Sign in to Claude Code with your subscription, once
-claude                                           # inside: /login
+# 3. Sign in with your subscription, once
+claude                                           # Claude Code: inside, /login
+codex login                                      # Codex: sign in with ChatGPT
 ```
 
 Then either:
 
-- **4a. In a session.** In that same `claude` session (started in the repository root) say:
-  "make a video from examples/briefs/07-en-bakery.md".
-- **4b. Headless.** `npm run make -- --brief examples/briefs/07-en-bakery.md`
+- **4a. In a session.** Start `claude` or `codex -s danger-full-access` in the repository root
+  and say: "make a video from examples/briefs/07-en-bakery.md". Codex runs without its sandbox
+  because rendering needs a browser that doesn't start inside the Codex sandbox (see Security);
+  in a plain `codex` session you'll approve leaving the sandbox for every render.
+- **4b. Headless.** `npm run make -- --brief examples/briefs/07-en-bakery.md` — the installed
+  agent becomes the director (Claude Code if both are installed). Pick explicitly with
+  `--agent codex` or `--agent claude`, or permanently with `STUDIO_AGENT=codex` in `.env`.
 
 A run takes 10–20 minutes and prints its progress; don't interrupt it (an interrupted run
 continues with `--resume`, see below). At the end it prints JSON: the video path is in the
@@ -83,6 +96,11 @@ VOICE_COMMAND=say -v Samantha -f {text_file} -o {out_wav} --data-format=LEI16@22
 
 (For Russian use `-v Milena`.) A voice may need downloading first: System Settings →
 Accessibility → Spoken Content → System voice → Manage Voices. Check with `npm run doctor`.
+
+**Free images with a ChatGPT subscription.** If you've signed in to Codex (`codex login`), put
+`IMAGE_PROVIDER=codex` in `.env`: Codex's built-in generator makes the images — with transparent
+backgrounds and references, about 30–60 seconds per image, counted against your subscription.
+It works with either director, including Claude Code.
 
 **Optional:** `brew install --cask blender` for 3D assets (tested on Blender 5.2; older versions
 may not work) and `brew install whisper-cpp` for precise word timings in captions.
@@ -104,13 +122,14 @@ Chrome Headless Shell, which Remotion renders with, needs system libraries:
 
 ## How to use it
 
-### As a skill, in a Claude Code session
+### As a skill, in a Claude Code or Codex session
 
-`make-video` is a project skill: it works when `claude` is started in this repository's root, and
-there is nothing to install into `~/.claude/skills`. You can also call it explicitly:
-`/make-video`.
+`make-video` is a project skill: it works when `claude` or `codex` is started in this
+repository's root (Claude Code reads it from `.claude/skills`, Codex from `.agents/skills`), and
+there is nothing to install in your home folder. You can also call it explicitly: `/make-video`
+in Claude Code, `$make-video` in Codex.
 
-Run `claude` in the repository root and ask in plain words: "make a reel for a flower shop
+Run `claude` or `codex` in the repository root and ask in plain words: "make a reel for a flower shop
 about five plant-care mistakes", "fix the ending of the last video". The
 [`make-video`](.claude/skills/make-video/SKILL.md) skill turns your request into a brief, creates
 a job folder and starts the director in one of two modes.
@@ -124,7 +143,9 @@ a job folder and starts the director in one of two modes.
 
 Claude Code asks for permission before terminal commands. Launching a video (`npm run make`) and
 `npm run doctor` are pre-approved in `.claude/settings.json`; approve the rest yourself (you can
-choose "always for this project"). While a question waits for an answer, the work stalls.
+choose "always for this project"). Codex started with its sandbox asks to leave it to launch
+the director and render: they need the network and a browser. While a question waits for an
+answer, the work stalls.
 
 ### One command
 
@@ -134,30 +155,32 @@ npm run make -- --brief path/to/brief.md  # or --brief "brief text"
 
 | Flag | What it does |
 |---|---|
+| `--agent claude\|codex` | who directs (default: `STUDIO_AGENT` from `.env`, else the installed one; Claude Code if both) |
 | `--slug name` | job folder name (`jobs/<slug>/`) |
 | `--brand dir` | client materials: `logo.svg/png`, `photos/`, `refs/`, `brand.json` (`{colors, fonts, words: {use, avoid}}`) |
 | `--author "@handle"` | sign-off in the ending |
 | `--size 1080x1920`, `--fps 30` | format |
-| `--model`, `--effort` | director model and effort (default: Claude Code's default for your account; the director does not read your personal `~/.claude` settings) |
-| `--max-budget-usd 6` | hard cap for the whole run, at API prices |
+| `--model`, `--effort` | director model and effort (default: the agent's default for your account; the director does not read your personal `~/.claude` settings or `~/.codex/config.toml`) |
+| `--max-budget-usd 6` | hard cap for the whole run, at API prices (Claude Code only: Codex doesn't report prices) |
+| `--timeout-min 90` | wall-clock cap — for either agent |
 | `--resume --slug name` | continue an interrupted run in `jobs/<name>/` |
 | `--dry-run` | only create the job folder |
 
 The job folder ends up with `out/final.mp4`, `notes.md` (the director's decisions, what was
 checked, "questions for the client"), `director.log` and `director.result.json` (time, turns,
-cost). If the director left major issues open, you get `out/candidate.mp4` with status
+and cost with Claude Code or tokens with Codex). If the director left major issues open, you get `out/candidate.mp4` with status
 `needs-stage-2` instead of `final.mp4`. Continue with `npm run make -- --resume --slug <folder name>`.
 
-### By hand, or with Codex
+### By hand
 
 ```bash
 studio/bin/studio new cafe --brief path/to/brief.md
-cd jobs/cafe && PATH="$PWD/../../studio/bin:$PATH" claude    # or codex
+cd jobs/cafe && PATH="$PWD/../../studio/bin:$PATH" claude    # or codex -s danger-full-access
 ```
 
-The job folder already contains `CLAUDE.md` and `AGENTS.md` (the director's guide) and
-`.claude/skills/` (all skills). `studio help` lists the tools. The Codex workflow is described in
-[`AGENTS.md`](AGENTS.md).
+The job folder already contains `CLAUDE.md` and `AGENTS.md` (the same director's guide, for
+Claude Code and for Codex) and the skills in `.claude/skills/` and `.agents/skills/`.
+`studio help` lists the tools.
 
 ## Providers
 
@@ -168,7 +191,7 @@ can do.
 | Step | Variable | Options | Without it |
 |---|---|---|---|
 | Voice | `VOICE_PROVIDER` | `openai` · `elevenlabs` · `command` · `none` | music plus on-screen text |
-| Images | `IMAGE_PROVIDER` | `openai` · `gemini` · `command` · `none` | code graphics, paper, 3D, your photos |
+| Images | `IMAGE_PROVIDER` | `openai` · `gemini` · `codex` · `command` · `none` | code graphics, paper, 3D, your photos |
 | Word timings | `ASR_PROVIDER` | `auto` · `whisper` · `openai` · `none` | estimate from word length, with a warning |
 
 | Provider | Capabilities | Keys in `.env` |
@@ -177,6 +200,7 @@ can do.
 | ElevenLabs | your own cloned voice, word timings returned with the audio | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL` |
 | OpenAI Images | transparent background, `--ref` reference images | `OPENAI_API_KEY`, `OPENAI_IMAGE_MODEL` |
 | Google Gemini | references; no transparency (remove backgrounds with `IMAGE_BG_COMMAND`, e.g. rembg) | `GEMINI_API_KEY`, `GEMINI_IMAGE_MODEL` |
+| Codex (ChatGPT subscription) | transparent backgrounds, `--ref` references; no key, uses your plan's limit | — (sign in: `codex login`) |
 | `command` | any program of your own for voice or images | `VOICE_COMMAND`, `IMAGE_COMMAND` |
 
 ### Your own voice with ElevenLabs
@@ -256,7 +280,8 @@ brief → doctor (what's connected) → brief facts → three concepts → style
       → gated render → probe → notes.md and "questions for the client"
 ```
 
-- **The director** is Claude Code. The guide (`studio/CLAUDE.md`) sets the bar: the video is
+- **The director** is Claude Code or Codex. Both follow one guide (`studio/CLAUDE.md`; inside a
+  job folder it's `CLAUDE.md` and `AGENTS.md`), which sets the bar: the video is
   watched on a phone in a feed, nothing slides off the edge, text is readable, no jerks and no
   empty frames. How to get there is the director's call.
 - **Tools** (`studio/bin`, run as `studio <tool>`): `doctor`, `voice`, `image`, `blender`,
@@ -278,20 +303,24 @@ brief → doctor (what's connected) → brief facts → three concepts → style
 
 ## Cost and time
 
-- **Director:** one video is roughly **$2–4** at API prices and **10–20 minutes** on an Apple
+- **Claude Code director:** one video is roughly **$2–4** at API prices and **10–20 minutes** on an Apple
   Silicon Mac. That's a ballpark from our runs, not a promise: it depends on the director model
   (Opus costs noticeably more than Sonnet), the brief and the number of revisions. On a Claude
   subscription this uses your plan's usage limit rather than a separate bill. How many videos fit
   in a Pro usage window is hard to predict (our rough guess: one or two); Max is more comfortable
   for regular work.
-- **Cap:** `--max-budget-usd` (default 6) caps a run. When it's reached, Claude Code stops the
+- **Codex director:** Codex doesn't report an API-price equivalent, so the run summary shows
+  tokens; on a ChatGPT subscription that's also usage of your plan's limit, not a separate bill.
+  The cap is time (`--timeout-min`).
+- **Cap:** for Claude Code, `--max-budget-usd` (default 6) caps a run. When it's reached, Claude Code stops the
   director; the work so far stays in the job folder, and
   `npm run make -- --resume --slug <folder name>` continues it (with a fresh cap).
 - **Heads-up:** if `ANTHROPIC_API_KEY` is set in your environment, Claude Code bills the API
   account instead of your subscription. The launcher warns about it.
 - **Voice and images** are billed to your own keys at the providers' prices. A typical video
   uses up to 12 images and a few lines of narration, and repeats are free thanks to the cache.
-  `command` and `none` cost nothing.
+  `command` and `none` cost nothing; with `IMAGE_PROVIDER=codex` images count against your
+  ChatGPT subscription.
 - **Rendering, sound effects, music, Blender and whisper** run locally and are free.
 
 ## Limitations
@@ -306,8 +335,8 @@ brief → doctor (what's connected) → brief facts → three concepts → style
   for the client" before publishing.
 - macOS is the primary platform. Linux should work but is less tested. Windows is not supported
   (WSL2 may work).
-- The one-command launcher is built for Claude Code. With Codex and other agents, a video is
-  made in an interactive session following `AGENTS.md`.
+- The directors are Claude Code and Codex. Other agents that read `AGENTS.md` can run a video in
+  their own interactive session, but haven't been tested.
 - Rendering needs internet access: Google Fonts are fetched at render time. The first render
   also downloads Chrome Headless Shell for Remotion (`npm run setup` does this ahead of time).
 
@@ -331,8 +360,8 @@ The full list of third-party components is in [`THIRD_PARTY_NOTICES.md`](THIRD_P
 
 ## Security
 
-The director is Claude Code with terminal access. **It acts with your macOS or Linux user's
-rights**: it can run commands, read your files and reach the network. That's how the studio
+The director is Claude Code or Codex with terminal access. **It acts with your macOS or Linux
+user's rights**: it can run commands, read your files and reach the network. That's how the studio
 works: the director writes and runs scenes, Blender scripts and checks itself.
 
 What the studio does to reduce the risk:
@@ -342,17 +371,24 @@ What the studio does to reduce the risk:
   with `KEY`, `TOKEN`, `SECRET`, `PASS` or `AUTH` in its name, plus common key formats.
 - A director started by `npm run make` (and in Solo mode) gets no keys in its environment —
   neither from `.env` nor from your shell (`OPENAI_API_KEY`, `*_TOKEN` etc. from `~/.zshrc`).
-  Only the Claude Code sign-in is kept. In Together mode the director is your own `claude`
-  session with your own environment.
-- The Read/Edit/Write tools are denied `.env` and the `studio/` folder (guide, skills, tools);
-  git is unavailable. The tool set is trimmed, and MCP servers and your personal `~/.claude`
-  settings are not loaded.
+  Only the agent's own sign-in is kept. In Together mode the director is your own `claude` or
+  `codex` session with your own environment.
+- **Claude Code:** the Read/Edit/Write tools are denied `.env` and the `studio/` folder (guide,
+  skills, tools); git is unavailable. The tool set is trimmed, and MCP servers and your personal
+  `~/.claude` settings are not loaded.
+- **Codex:** your personal `~/.codex/config.toml` (model, MCP, plugins, notifications) is not
+  loaded, and git inside the job folder can't see the studio repository. The Codex sandbox is
+  off: the browser Remotion renders with doesn't start inside it, so the rights are the same as
+  Claude Code's terminal. For Codex, staying out of `.env` and `studio/` rests on the guide, not
+  on permissions.
+- After a run, `npm run make` compares `studio/` with its state before the run and warns if the
+  director changed anything (the `studioChanged` field in the summary).
 - Studio tools read and write files only inside the job folder: a prompt file, reference image
   or lines file from elsewhere never reaches a provider. No value can turn a `VOICE_COMMAND` /
   `IMAGE_COMMAND` placeholder into a command.
 - `--brand` copies only images and `brand.json`, skipping symlinks and hidden files.
 
-What this does **not** give you: full isolation. Through the terminal the director can
+What this does **not** give you: full isolation. Through the terminal either director can
 technically still `cat .env`. So:
 
 - keep only the studio's provider keys in `.env` and set a spending limit in each provider's
@@ -378,13 +414,13 @@ technically still `cat .env`. So:
 ## Layout
 
 ```
-.claude/skills/make-video/   Claude Code skill: "make a video…"
+.claude/skills/make-video/   "make a video…" skill (Claude Code; Codex sees it via .agents/skills)
 studio/CLAUDE.md             director's guide (CLAUDE.md and AGENTS.md inside a job folder)
 studio/bin/                  studio tools (studio <tool>), providers, launcher helpers
 studio/lib/                  @studio scene library: frame, motion, fonts, 3D, paper
 studio/skills/               20 skills: knowledge, helpers, checks
 studio/template/             job folder template
-studio/make.ts               headless director launcher (npm run make)
+studio/make.ts               headless director launcher (npm run make; agents in studio/bin/_agents.ts)
 scripts/setup.mjs            npm run setup
 public/sfx, public/music     CC0 sound effects and music
 examples/briefs/             example briefs (01–06 in Russian, 07 in English; any language works)

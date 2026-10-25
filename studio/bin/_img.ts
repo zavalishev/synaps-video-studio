@@ -1,7 +1,9 @@
-// Картинки через провайдера из .env: IMAGE_PROVIDER = openai | gemini | command | none.
+// Картинки через провайдера из .env: IMAGE_PROVIDER = openai | gemini | codex | command | none.
+// codex — встроенная генерация картинок Codex CLI по подписке ChatGPT (без ключа API).
 // Image generation providers configured in .env.
-import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { codexBin, codexHome, codexLogin } from "./_tools";
 import { deps, fetchRetry, need, pick, ProviderError, ProviderNotConfigured, runCommand, short, templateProblem, tmp, type D, type Deps, type Env } from "./_http";
 
 export type ImageConfig = {
@@ -30,6 +32,13 @@ export const imageConfig = (env: Env = process.env): ImageConfig => {
     const ok = Boolean(env.GEMINI_API_KEY?.trim());
     return { provider: p, model, ready: ok, problem: ok ? undefined : "нет GEMINI_API_KEY", tag: `gemini:${model}`, transparency: false, refs: true, bgRemover };
   }
+  if (p === "codex") {
+    // Встроенный генератор Codex: прозрачность и референсы (-i) умеет, ключ не нужен — вход
+    // codex login по подписке ChatGPT. Расход — лимит подписки, не деньги.
+    const bin = codexBin(env);
+    const problem = !bin ? "нет Codex CLI (npm i -g @openai/codex, затем codex login)" : !codexLogin(env) ? "Codex CLI не вошёл — выполните codex login" : undefined;
+    return { provider: p, model: "codex image_gen", ready: !problem, problem, tag: "codex:image_gen", transparency: true, refs: true, bgRemover };
+  }
   if (p === "command") {
     const tpl = env.IMAGE_COMMAND?.trim() ?? "";
     const bad = tpl ? templateProblem("IMAGE_COMMAND", tpl, IMAGE_PLACEHOLDERS) : "нет IMAGE_COMMAND";
@@ -37,7 +46,7 @@ export const imageConfig = (env: Env = process.env): ImageConfig => {
       transparency: env.IMAGE_COMMAND_TRANSPARENT === "1", refs: /\{refs\}/.test(tpl), bgRemover };
   }
   if (p === "none") return { provider: "none", ...off, problem: "картинки выключены (IMAGE_PROVIDER=none)", tag: "none" };
-  return { provider: p, ...off, problem: `неизвестный IMAGE_PROVIDER=${p} (openai | gemini | command | none)`, tag: p };
+  return { provider: p, ...off, problem: `неизвестный IMAGE_PROVIDER=${p} (openai | gemini | codex | command | none)`, tag: p };
 };
 
 const SIZES: Record<string, [number, number]> = { "1024x1024": [1024, 1024], "1024x1536": [1024, 1536], "1536x1024": [1536, 1024] };
@@ -113,6 +122,54 @@ const imageGemini = async (prompt: string, o: ImageOptions, refs: Buffer[], cfg:
   return { data: Buffer.from((img.inlineData ?? img.inline_data)!.data, "base64"), notes };
 };
 
+// Codex CLI: одна сессия codex exec без песочницы на запись (read-only) просит встроенный
+// генератор сделать одну картинку; файл Codex сам кладёт в $CODEX_HOME/generated_images/<сессия>/.
+// Промпт идёт файлом через stdin, референсы — -i, пути — через окружение (шаблон команды).
+export const codexImagePrompt = (prompt: string, o: ImageOptions, nRefs: number) => {
+  const size = o.size && o.size !== "auto" ? o.size : null;
+  const [w, h] = size ? (SIZES[size] ?? size.split("x").map(Number)) : [0, 0];
+  const orient = size ? (w > h ? "landscape" : w < h ? "portrait" : "square") : null;
+  const bg = o.background === "transparent" ? "transparent (real alpha channel), isolated subject with clean edges"
+    : o.background === "opaque" ? "opaque, the scene fills the whole frame" : null;
+  return [
+    "Generate exactly one image with your built-in image generation tool, then stop.",
+    "Do not read files, do not run shell commands, do not copy, move or describe the result: the image is collected automatically.",
+    nRefs ? `Use the ${nRefs} attached image${nRefs > 1 ? "s" : ""} as visual reference (same character, object or style), not as content to copy verbatim.` : "",
+    size ? `Size: ${size} (${orient}).` : "",
+    bg ? `Background: ${bg}.` : "",
+    o.quality ? `Quality: ${o.quality}.` : "",
+    "Image prompt:",
+    prompt,
+  ].filter(Boolean).join("\n");
+};
+const imageCodex = async (prompt: string, o: ImageOptions, refs: Buffer[], _cfg: ImageConfig, d: D): Promise<ImageResult> => {
+  const bin = codexBin(d.env);
+  if (!bin) throw new ProviderNotConfigured("картинки Codex: нет Codex CLI (npm i -g @openai/codex, затем codex login)");
+  const dir = tmp("studio-codex-img-");
+  try {
+    const pf = join(dir, "prompt.txt"), events = join(dir, "events.jsonl");
+    writeFileSync(pf, codexImagePrompt(prompt, o, refs.length));
+    const vars: Record<string, string> = { bin, dir, prompt_file: pf, events };
+    const refArgs = refs.map((b, i) => { const k = `ref${i + 1}`; vars[k] = join(dir, `${k}.jpg`); writeFileSync(vars[k], b); return `-i {${k}}`; }).join(" ");
+    const tpl = `{bin} exec --json --ephemeral --skip-git-repo-check --ignore-user-config -c 'notify=[]' -s read-only -C {dir} ${refArgs} - < {prompt_file} > {events}`;
+    runCommand("картинки Codex", tpl, vars, d, timeout(d));
+    const lines = existsSync(events) ? readFileSync(events, "utf8").split("\n").filter((l) => l.startsWith("{")) : [];
+    let thread = "", said = "", failed = "";
+    for (const l of lines) {
+      try {
+        const ev = JSON.parse(l) as { type?: string; thread_id?: string; item?: { type?: string; text?: string }; error?: { message?: string }; message?: string };
+        if (ev.type === "thread.started") thread = ev.thread_id ?? "";
+        if (ev.type === "item.completed" && ev.item?.type === "agent_message" && ev.item.text?.trim()) said = ev.item.text.trim();
+        if (ev.type === "turn.failed" || ev.type === "error") failed = ev.error?.message ?? ev.message ?? "ошибка";
+      } catch { /* не JSON */ }
+    }
+    const out = thread ? join(codexHome(d.env), "generated_images", thread) : "";
+    const files = out && existsSync(out) ? readdirSync(out).filter((f) => /\.png$/i.test(f)).map((f) => join(out, f)).sort((x, y) => statSync(y).mtimeMs - statSync(x).mtimeMs) : [];
+    if (!files.length) throw new ProviderError(`картинки Codex: картинки нет${failed ? ` (${failed})` : ""}${said ? `: ${said.slice(0, 300)}` : ""}`);
+    return { data: readFileSync(files[0]), notes: files.length > 1 ? [`Codex сделал ${files.length} картинок — взята последняя`] : [] };
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+};
+
 // Своя программа: IMAGE_COMMAND с подстановками {prompt_file} {out_png} (= {out}) {size}
 // {width} {height} {quality} {background} {refs} (пути референсов JPEG через запятую).
 const imageCommand = async (prompt: string, o: ImageOptions, refs: Buffer[], cfg: ImageConfig, d: D): Promise<ImageResult> => {
@@ -154,6 +211,7 @@ export const image = async (prompt: string, o: ImageOptions = {}, refs: Buffer[]
   if (!cfg.ready) throw new ProviderNotConfigured(`картинки: ${cfg.problem}`);
   const r = cfg.provider === "openai" ? await imageOpenAI(prompt, o, refs, cfg, d)
     : cfg.provider === "gemini" ? await imageGemini(prompt, o, refs, cfg, d)
+    : cfg.provider === "codex" ? await imageCodex(prompt, o, refs, cfg, d)
     : await imageCommand(prompt, o, refs, cfg, d);
   if (o.background === "transparent" && !cfg.transparency) {
     // Без IMAGE_BG_COMMAND прозрачности не будет — studio image измерит альфу и предупредит.

@@ -1,13 +1,14 @@
 // Что подключено к студии и что директор может сделать (бесплатно, без сети, ключи не печатает).
 //   studio doctor [--json]
 // Провайдеры из .env (озвучка, картинки, тайминги слов) и локальные программы (ffmpeg, Blender,
-// whisper.cpp, Claude Code CLI). Директор запускает его первым и строит ролик под то, что есть.
+// whisper.cpp, агенты-режиссёры Claude Code и Codex CLI). Директор запускает его первым и строит ролик под то, что есть.
 // What is configured and what the director can do. No network, never prints keys.
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { DOTENV_KEYS, ENV_FILE } from "./_env";
 import { asrPlan, imageConfig, SECRET_VARS, voiceConfig } from "./_providers";
-import { blenderBin, claudeBin, which, whisperBin, whisperModel } from "./_tools";
+import { blenderBin, which, whisperBin, whisperModel } from "./_tools";
+import { agentStatus, installHint, pickAgent } from "./_agents";
 import { parseArgs } from "./_lib";
 
 const a = parseArgs(process.argv.slice(2), ["json"]);
@@ -24,7 +25,11 @@ const version = (bin: string | null, args: string[]) => {
 const ffmpeg = which("ffmpeg"), ffprobe = which("ffprobe");
 const blender = blenderBin(env);
 const blenderOk = blender ? existsSync(blender) || Boolean(which(blender)) : false;
-const claude = claudeBin(env);
+const agents = agentStatus(env);
+const claude = agents.claude.bin, codex = agents.codex.bin;
+// Кто будет режиссёром в npm run make (STUDIO_AGENT или какой установлен).
+let director: string | null = null, directorProblem: string | null = null;
+try { director = pickAgent(undefined, env).name; } catch (e) { directorProblem = (e as Error).message.split("\n")[0]; }
 const node = process.versions.node;
 const nodeMajor = Number(node.split(".")[0]);
 
@@ -35,13 +40,13 @@ else cannot.push(voice.provider === "none"
   ? "голоса нет (VOICE_PROVIDER=none): ролик без речи — музыка (studio music) + текст на экране, биты по долям музыки и событиям"
   : `голоса нет: ${voice.problem} — до настройки ролик без речи`);
 if (img.ready) {
-  can.push(`картинки: studio image через ${img.provider} (${img.model}) — платно, вашим ключом`);
+  can.push(`картинки: studio image через ${img.provider} (${img.model}) — ${img.provider === "codex" ? "по подписке Codex (расход её лимита)" : img.provider === "command" ? "своей программой" : "платно, вашим ключом"}`);
   if (!img.transparency) (img.bgRemover ? can : cannot).push(img.bgRemover
     ? "вырезки: провайдер без прозрачности, фон убирает IMAGE_BG_COMMAND"
     : "прозрачных вырезок нет (провайдер их не умеет, IMAGE_BG_COMMAND не задан): предметы — на однотонном фоне, в карточке или из Blender");
   if (!img.refs) cannot.push("референсов (--ref) нет: тот же герой держится только словами промпта — лучше Blender/paper-2d/код");
 } else cannot.push(img.provider === "none"
-  ? "картинок нет (IMAGE_PROVIDER=none): кадр — кодом (@studio, kinetic-typography, explainer-cards, data-viz), paper-2d, Blender, фото заказчика"
+  ? `картинок нет (IMAGE_PROVIDER=none): кадр — кодом (@studio, kinetic-typography, explainer-cards, data-viz), paper-2d, Blender, фото заказчика${codex && agents.codex.login === "chatgpt" ? ". Есть вход в Codex по подписке — владелец может включить картинки без ключа: IMAGE_PROVIDER=codex в .env" : ""}`
   : `картинок нет: ${img.problem} — до настройки кадр без генерации`);
 if (blenderOk) can.push("3D-ассеты: studio blender (бесплатно)"); else cannot.push("Blender не найден: 3D только в кадре (three.js, @studio/three) — без studio blender");
 const timingName: Record<string, string> = { voice: "из ответа озвучки", whisper: "whisper.cpp", openai: "OpenAI transcription (платно)", proportional: "пропорционально длине слов (приблизительно)" };
@@ -51,6 +56,7 @@ if (voice.ready) (asr[0] === "proportional" ? cannot : can).push(asr[0] === "pro
 can.push("сцены Remotion, кадры, рендер, проверки, звуки (studio sfx) и музыка (studio music) — локально и бесплатно");
 const missing: string[] = [];
 if (!ffmpeg || !ffprobe) missing.push("ffmpeg/ffprobe — без них нет рендера и звука (macOS: brew install ffmpeg; Linux: apt install ffmpeg)");
+if (!claude && !codex) missing.push(`агент-режиссёр — нужен хотя бы один: ${installHint("claude")}; или ${installHint("codex")}`);
 if (nodeMajor < 22) missing.push(`Node ${node} — нужен 22+ (лучше 24)`);
 
 const report = {
@@ -58,7 +64,8 @@ const report = {
   voice: { provider: voice.provider, model: voice.model, voice: voice.voice, ready: voice.ready, problem: voice.problem ?? null, timestamps: voice.timestamps, style: voice.style },
   image: { provider: img.provider, model: img.model, ready: img.ready, problem: img.problem ?? null, transparency: img.transparency, refs: img.refs, bgRemover: img.bgRemover },
   timing: asr, keys,
-  tools: { node, ffmpeg, ffprobe, blender: blenderOk ? blender : null, whisper: wBin && wModel ? { bin: wBin, model: wModel } : null, claude },
+  tools: { node, ffmpeg, ffprobe, blender: blenderOk ? blender : null, whisper: wBin && wModel ? { bin: wBin, model: wModel } : null, claude, codex },
+  agent: { choice: agents.choice, director, problem: directorProblem, codexLogin: agents.codex.login },
   can, cannot, missing,
 };
 if (a.json) { console.log(JSON.stringify(report, null, 1)); process.exit(missing.length ? 1 : 0); }
@@ -79,7 +86,10 @@ L.push(`  [${yes(nodeMajor >= 22)}] node ${node}`);
 L.push(`  [${yes(ffmpeg && ffprobe)}] ffmpeg ${version(ffmpeg, ["-version"])?.replace(/^ffmpeg version /, "").split(" ")[0] ?? ""}`);
 L.push(`  [${yes(blenderOk)}] blender ${blenderOk ? blender : "(по желанию: blender.org или brew install --cask blender)"}`);
 L.push(`  [${yes(wBin && wModel)}] whisper.cpp ${wBin && wModel ? `${wBin}, модель ${wModel}` : wBin ? "есть, но нет модели — WHISPER_CPP_MODEL=…/ggml-small.bin" : "(по желанию: brew install whisper-cpp + модель ggml-small.bin)"}`);
-L.push(`  [${yes(claude)}] claude ${claude ?? "(Claude Code CLI — режиссёр: https://claude.com/claude-code)"}`);
+L.push("");
+L.push(`Режиссёр (npm run make; STUDIO_AGENT=${agents.choice})  ${director ? `→ ${director}` : directorProblem}`);
+L.push(`  [${yes(claude)}] claude ${claude ?? "(Claude Code CLI: https://claude.com/claude-code)"}`);
+L.push(`  [${yes(codex && agents.codex.login)}] codex ${codex ? `${codex}${agents.codex.login === "chatgpt" ? ", вход по подписке ChatGPT" : agents.codex.login === "apikey" ? ", вход по ключу API" : " — не вошёл: codex login"}` : "(Codex CLI: npm i -g @openai/codex, затем codex login)"}`);
 L.push("");
 L.push("Директор может");
 for (const s of can) L.push(`  + ${s}`);

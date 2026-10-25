@@ -225,7 +225,7 @@ export const guardNoteFrames = (list: GuardHit[], kind: string): Set<number> =>
   new Set(list.filter((g) => g.kind === `note:${kind}`).flatMap((g) => g.frames));
 
 // ---------- бюджет прогона ----------
-// Сколько уже потрачено: по director.log (поток событий claude -p). Завершённые сессии — по их
+// Сколько уже потрачено: по director.log (поток событий claude -p или codex exec --json). Завершённые сессии — по их
 // итогу (total_cost_usd), идущая — по usage сообщений с ценами модели (подогнаны по modelUsage
 // прошлых прогонов: Opus — запись кэша 1 ч $8/M, чтение $0.20/M, выход $20/M; Sonnet вдвое
 // дешевле на выходе). Ориентир — STUDIO_BUDGET_USD / STUDIO_BUDGET_MIN (их ставит make.ts).
@@ -235,7 +235,7 @@ const PRICES: Array<[RegExp, Price]> = [
   [/sonnet/, { in: 2, cw5: 2.5, cw1h: 4, cr: 0.2, out: 10 }],
   [/./, { in: 4, cw5: 5, cw1h: 8, cr: 0.2, out: 20 }],
 ];
-export type Budget = { usd: number; calls: number; images: number; minutes: number; reviews: number; renders: number; limitUsd: number; limitMin: number };
+export type Budget = { agent: "claude" | "codex"; usd: number; calls: number; images: number; minutes: number; reviews: number; renders: number; limitUsd: number; limitMin: number };
 export const readBudget = (dir: string): Budget | null => {
   const log = join(dir, "director.log");
   if (!existsSync(log)) return null;
@@ -251,9 +251,26 @@ export const readBudget = (dir: string): Budget | null => {
   // оцениваем по длине текста и аргументов инструментов (≈ 0.9 токена на знак вместе с
   // рассуждениями — подогнано по четырём прогонам раунда 2).
   const msgs = new Map<string, { sid: string; model: string; u: Record<string, number> & { cache_creation?: Record<string, number> }; out: number; chars: number }>();
-  let calls = 0, images = 0, reviews = 0, renders = 0;
+  let calls = 0, images = 0, reviews = 0, renders = 0, codex = false;
+  const countCmd = (cmd: string) => {
+    if (/self-review\/review\.ts/.test(cmd)) reviews++;
+    if (/studio render\b/.test(cmd) && !/--audio-only/.test(cmd)) renders++;
+  };
   for (const line of txt.split("\n")) {
     if (!line.startsWith("{")) continue;
+    // Codex (codex exec --json): цены в потоке нет (подписка) — считаем вызовы, просмотры картинок,
+    // review и рендеры; бюджет директора у Codex — время.
+    if (line.startsWith('{"type":"thread.') || line.startsWith('{"type":"item.') || line.startsWith('{"type":"turn.')) {
+      codex = true;
+      let ce: { type?: string; item?: { type?: string; command?: string; path?: string; [k: string]: unknown } };
+      try { ce = JSON.parse(line); } catch { continue; }
+      const it = ce.item;
+      if (ce.type !== "item.started" || !it?.type || ["agent_message", "reasoning", "todo_list", "error"].includes(it.type)) continue;
+      calls++;
+      if (it.type === "command_execution") countCmd(String(it.command ?? ""));
+      else if (/\.(png|jpe?g|webp)$/i.test(String(it.path ?? ""))) images++;
+      continue;
+    }
     let ev: { type?: string; session_id?: string; total_cost_usd?: number; parent_tool_use_id?: string | null; message?: { id?: string; model?: string; usage?: Record<string, number>; content?: Array<{ type: string; name?: string; input?: Record<string, string> }> } };
     try { ev = JSON.parse(line); } catch { continue; }
     if (ev.type === "result" && ev.session_id) results.set(ev.session_id, Math.max(results.get(ev.session_id) ?? 0, ev.total_cost_usd ?? 0));
@@ -269,9 +286,7 @@ export const readBudget = (dir: string): Budget | null => {
       if (c.type !== "tool_use") continue;
       calls++;
       if (c.name === "Read" && /\.(png|jpe?g|webp)$/i.test(c.input?.file_path ?? "")) images++;
-      const cmd = c.name === "Bash" ? c.input?.command ?? "" : "";
-      if (/self-review\/review\.ts/.test(cmd)) reviews++;
-      if (/studio render\b/.test(cmd) && !/--audio-only/.test(cmd)) renders++;
+      countCmd(c.name === "Bash" ? c.input?.command ?? "" : "");
     }
   }
   for (const v of msgs.values()) {
@@ -284,14 +299,15 @@ export const readBudget = (dir: string): Budget | null => {
   }
   let usd = 0;
   for (const sid of new Set([...results.keys(), ...est.keys()])) usd += results.get(sid) ?? est.get(sid) ?? 0;
-  return { usd, calls, images, reviews, renders, minutes: Number.isFinite(t0) ? (Date.now() - t0) / 60000 : 0, limitUsd, limitMin };
+  return { agent: codex ? "codex" : "claude", usd, calls, images, reviews, renders, minutes: Number.isFinite(t0) ? (Date.now() - t0) / 60000 : 0, limitUsd, limitMin };
 };
 // Одна строка для вывода инструментов: директор видит, сколько потратил, не считая сам.
 export const budgetLine = (dir: string): string | null => {
   let b: Budget | null = null;
   try { b = readBudget(dir); } catch { return null; }
   if (!b || (!b.calls && !b.usd)) return null;
-  const over = b.usd >= b.limitUsd * 0.85 || b.minutes >= b.limitMin * 0.85;
-  return `бюджет: $${b.usd.toFixed(2)} из ${b.limitUsd} · ${b.minutes.toFixed(0)} мин из ${b.limitMin} · вызовов ${b.calls} · картинок прочитано ${b.images} · review ${b.reviews} · рендеров ${b.renders}` +
+  const sub = b.agent === "codex"; // у Codex цены нет: бюджет — время (и лимит подписки)
+  const over = (!sub && b.usd >= b.limitUsd * 0.85) || b.minutes >= b.limitMin * 0.85;
+  return `бюджет: ${sub ? "подписка Codex" : `$${b.usd.toFixed(2)} из ${b.limitUsd}`} · ${b.minutes.toFixed(0)} мин из ${b.limitMin} · вызовов ${b.calls} · картинок прочитано ${b.images} · review ${b.reviews} · рендеров ${b.renders}` +
     (over ? "\n  → бюджет почти исчерпан: финализируй (studio render → probe → mixcheck → notes.md); оставшиеся WARN — в notes.md как принятые" : "");
 };

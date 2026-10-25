@@ -3,7 +3,7 @@ studio <инструмент> [аргументы]      — запускать �
 
   studio doctor [--json]
       что подключено (бесплатно, без сети): провайдеры озвучки/картинок/таймингов из .env и что они
-      умеют, ffmpeg, Blender, whisper.cpp, claude; что директор может и не может. Запускать первым.
+      умеют, ffmpeg, Blender, whisper.cpp, агенты claude/codex; что директор может и не может. Запускать первым.
 
   studio voice lines.json [--voice <голос>] [--style "указания диктору"] [--pace 1.0] [--gap 0.25]
                [--head 0.3] [--lang ru] [--out voice.wav] [--keep-duration] [--estimate]
@@ -20,7 +20,7 @@ studio <инструмент> [аргументы]      — запускать �
   studio image "промпт" [--out img/x.png] [--size 1024x1024|1024x1536|1536x1024|auto]
                [--quality low|medium|high] [--bg transparent|opaque|auto] [--prompt-file f] [--force]
                [--ref img/sheet.png[,img/b.png]]
-      картинка через IMAGE_PROVIDER из .env (openai | gemini | command | none) → public/<out>,
+      картинка через IMAGE_PROVIDER из .env (openai | gemini | codex | command | none) → public/<out>,
       манифест public/images.json. Платно, кэш. Без прозрачности у провайдера — белый фон и ВНИМАНИЕ.
       --ref — референсы (лист персонажа, образец стиля): тот же герой в новой позе/сцене.
       ~10–60 с на картинку. Реальный размер может отличаться от --size (печатается);

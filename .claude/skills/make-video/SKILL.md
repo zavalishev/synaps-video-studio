@@ -1,6 +1,6 @@
 ---
 name: make-video
-description: Делает короткий вертикальный ролик (Reels, Shorts, TikTok) по брифу в студии этого репозитория — Claude Code становится режиссёром, студия даёт инструменты и скиллы, на выходе MP4. Используй, когда просят «сделай ролик / видео / рилс / шортс про …», «смонтируй промо», «анимируй объяснялку», а также для правок уже сделанного ролика в jobs/. Makes a short vertical video (Reels/Shorts) from a brief; use for "make a video/reel about …" and for revising an existing job.
+description: Делает короткий вертикальный ролик (Reels, Shorts, TikTok) по брифу в студии этого репозитория — агент (Claude Code или Codex) становится режиссёром, студия даёт инструменты и скиллы, на выходе MP4. Используй, когда просят «сделай ролик / видео / рилс / шортс про …», «смонтируй промо», «анимируй объяснялку», а также для правок уже сделанного ролика в jobs/. Makes a short vertical video (Reels/Shorts) from a brief; use for "make a video/reel about …" and for revising an existing job.
 ---
 
 # Ролик по брифу
@@ -10,7 +10,11 @@ description: Делает короткий вертикальный ролик (
 режиссёра — `studio/CLAUDE.md`, скиллы ремесла — `studio/skills/` (карточки: `studio skill <имя>`).
 
 Если текущая папка уже папка ролика (в ней есть `job.json`) — новую не заводи: ты режиссёр этого
-ролика, работай по `CLAUDE.md` рядом.
+ролика, работай по `CLAUDE.md` (он же `AGENTS.md`) рядом.
+
+**Codex:** рендер студии запускает браузер (Chrome Headless Shell), а в песочнице Codex он не
+стартует. Команды `npm run make`, `studio still`, `studio render`, `studio image` запускай с
+выходом из песочницы (запроси разрешение у пользователя) или в сессии `codex -s danger-full-access`.
 
 ## 1. Готовность (≈ 10 с, бесплатно)
 
@@ -52,11 +56,13 @@ studio/bin/studio doctor
 ## 3. Режим
 
 **«Сам» (по умолчанию)** — режиссёр работает без окна, два этапа с чистым контекстом (сборка →
-доводка). Это дешевле и стабильнее, чем вести весь ролик в этом разговоре. Запусти **в фоне**
-(Bash с `run_in_background`, прогон идёт 10–20 минут):
+доводка). Это дешевле и стабильнее, чем вести весь ролик в этом разговоре. Режиссёр — тот же
+агент, что и ты: `--agent claude` в Claude Code, `--agent codex` в Codex. Запусти **в фоне**
+(Claude Code — Bash с `run_in_background`; Codex — `nohup … &` вне песочницы), прогон идёт
+10–20 минут:
 
 ```bash
-npm run -s make -- --brief jobs/<slug>.brief.md --slug <slug> [--brand <папка>] [--author "@handle"] \
+npm run -s make -- --agent <claude|codex> --brief jobs/<slug>.brief.md --slug <slug> [--brand <папка>] [--author "@handle"] \
   > jobs/<slug>.result.json 2> jobs/<slug>.progress.log
 ```
 
@@ -65,8 +71,9 @@ npm run -s make -- --brief jobs/<slug>.brief.md --slug <slug> [--brand <папк
 
 - где файл (`final`; при `status: needs-stage-2` это `out/candidate.mp4` — ролик собран, но
   открыты замечания `open`) и предложи открыть: `open <файл>` (macOS) / `xdg-open` (Linux);
-- концепт одной фразой (`summary.concept`), минуты и стоимость (`minutes`, `costUsd` — в
-  пересчёте на цены API; на подписке это расход лимита, а не отдельный счёт);
+- концепт одной фразой (`summary.concept`), минуты и стоимость (`minutes`; у Claude Code
+  `costUsd` — в пересчёте на цены API, у Codex `tokens`; на подписке это расход лимита, а не
+  отдельный счёт);
 - **«Вопросы заказчику»** (`clientQuestions`) — списком, без пересказа всего notes.md;
 - ненулевой `exitCode` или `exists: false` — что случилось, по хвосту
   `jobs/<slug>/director.log`; продолжить можно `npm run make -- --resume --slug <slug>`.

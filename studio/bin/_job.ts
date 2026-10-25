@@ -10,14 +10,42 @@ export const slugify = (s: string) =>
     .replace(/[а-я]/g, (c) => ({ а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ж: "zh", з: "z", и: "i", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u", ф: "f", х: "h", ц: "c", ч: "ch", ш: "sh", щ: "sch", ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya" } as Record<string, string>)[c] ?? "")
     .replace(/[^a-z0-9_]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "job"; // «_» в начале сохраняется (_skilltest-*)
 
+// Скиллы студии в папке ролика: .claude/skills (Claude Code) и .agents/skills (Codex) — ссылки
+// на studio/skills, так что пути вида .claude/skills/self-review/review.ts работают у обоих.
+export const SKILL_DIRS = [join(".claude", "skills"), join(".agents", "skills")];
 export const linkSkills = (dir: string) => {
-  const skillsDir = join(dir, ".claude", "skills");
-  mkdirSync(skillsDir, { recursive: true });
   const src = join(STUDIO, "skills");
-  for (const name of readdirSync(src, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)) {
-    const link = join(skillsDir, name);
-    if (!existsSync(link)) symlinkSync(relative(skillsDir, join(src, name)), link);
+  const names = readdirSync(src, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
+  for (const sub of SKILL_DIRS) {
+    const skillsDir = join(dir, sub);
+    mkdirSync(skillsDir, { recursive: true });
+    for (const name of names) {
+      const link = join(skillsDir, name);
+      if (!existsSync(link)) symlinkSync(relative(skillsDir, join(src, name)), link);
+    }
   }
+};
+
+// Снимок studio/ (путь → размер и время правки) и разница двух снимков: make.ts сверяет студию
+// до и после прогона директора. Кэш Python (__pycache__) и скрытые файлы не считаются.
+export const studioSnapshot = (root = STUDIO): Map<string, string> => {
+  const m = new Map<string, string>();
+  const walk = (d: string) => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      if (e.name.startsWith(".") || e.name === "__pycache__" || e.name === "node_modules") continue;
+      const f = join(d, e.name);
+      if (e.isDirectory()) walk(f);
+      else if (e.isFile()) { const st = statSync(f); m.set(relative(root, f), `${st.size}:${st.mtimeMs}`); }
+    }
+  };
+  walk(root);
+  return m;
+};
+export const studioChanges = (a: Map<string, string>, b: Map<string, string>): string[] => {
+  const out: string[] = [];
+  for (const [k, v] of b) if (!a.has(k)) out.push(`+ studio/${k}`); else if (a.get(k) !== v) out.push(`~ studio/${k}`);
+  for (const k of a.keys()) if (!b.has(k)) out.push(`- studio/${k}`);
+  return out.sort();
 };
 
 // author — подпись публикующего (аккаунт, бренд) из профиля пользователя продукта: директор

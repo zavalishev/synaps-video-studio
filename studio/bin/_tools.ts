@@ -1,8 +1,8 @@
-// Где лежат локальные программы студии (macOS и Linux): Blender, whisper.cpp, Claude Code CLI.
+// Где лежат локальные программы студии (macOS и Linux): Blender, whisper.cpp, Claude Code CLI, Codex CLI.
 // Переменная окружения (или строка в .env) всегда важнее поиска по обычным местам.
 // Local tool discovery. An env variable always wins over the usual install locations.
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -27,6 +27,24 @@ export const blenderBin = (env = process.env): string | null =>
 // Claude Code CLI: $CLAUDE_BIN, иначе ~/.local/bin/claude (родной установщик), иначе из PATH.
 export const claudeBin = (env = process.env): string | null =>
   fromEnv(env.CLAUDE_BIN) ?? firstExisting([join(homedir(), ".local/bin/claude")]) ?? which("claude");
+
+// Codex CLI: $CODEX_BIN, иначе Homebrew/npm в обычных местах, иначе из PATH.
+export const codexBin = (env = process.env): string | null =>
+  fromEnv(env.CODEX_BIN) ?? firstExisting(["/opt/homebrew/bin/codex", "/usr/local/bin/codex", join(homedir(), ".local/bin/codex")]) ?? which("codex");
+
+// Папка Codex CLI (вход по подписке, сгенерированные картинки): $CODEX_HOME, иначе ~/.codex.
+export const codexHome = (env = process.env): string => fromEnv(env.CODEX_HOME) ?? join(homedir(), ".codex");
+
+// Как Codex вошёл: «подписка ChatGPT», «ключ API» или null (не входил — `codex login`).
+// Читается только поле auth_mode, токены не трогаются.
+export const codexLogin = (env = process.env): "chatgpt" | "apikey" | null => {
+  try {
+    const j = JSON.parse(readFileSync(join(codexHome(env), "auth.json"), "utf8")) as { auth_mode?: string; OPENAI_API_KEY?: string | null; tokens?: unknown };
+    if (j.auth_mode === "chatgpt" || (j.tokens && !j.OPENAI_API_KEY)) return "chatgpt";
+    if (j.auth_mode === "apikey" || j.OPENAI_API_KEY) return "apikey";
+    return null;
+  } catch { return null; }
+};
 
 // whisper.cpp: программа $WHISPER_CPP_BIN, иначе whisper-cli (Homebrew: brew install whisper-cpp)
 // или whisper-cpp из PATH.

@@ -1,6 +1,6 @@
 // Провайдеры платных шагов студии — каждый пользователь подключает своих в .env (образец .env.example):
 //   VOICE_PROVIDER = openai | elevenlabs | command | none   — studio voice   (_tts.ts)
-//   IMAGE_PROVIDER = openai | gemini | command | none       — studio image   (_img.ts)
+//   IMAGE_PROVIDER = openai | gemini | codex | command | none — studio image (_img.ts; codex — по подписке ChatGPT)
 //   ASR_PROVIDER   = auto | whisper | openai | none         — тайминги слов  (_asr.ts)
 // command — любая своя программа по шаблону команды (Kimi-Audio, Silero, Piper, XTTS, ComfyUI…).
 // Что настроено и что директор может сделать — `studio doctor`. Ключи никогда не печатаются.

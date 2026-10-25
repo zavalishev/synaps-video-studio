@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Первая настройка студии: npm run setup [-- --yes] [-- --no-whisper] [-- --no-browser] [-- --skip-install]
-//   1) Node ≥ 22; 2) npm ci (точные версии из package-lock.json); 3) ffmpeg, Claude Code, Blender, whisper.cpp — есть ли и как поставить;
+//   1) Node ≥ 22; 2) npm ci (точные версии из package-lock.json); 3) ffmpeg, агент-режиссёр (Claude Code или Codex CLI), Blender, whisper.cpp — есть ли и как поставить;
 //   4) .env из .env.example (если ещё нет); 5) по желанию скачать модель whisper.cpp (бесплатно, ≈ 0,5 ГБ);
 //   6) браузер для рендера Remotion (Chrome Headless Shell, бесплатно); 7) studio doctor.
 // Ничего платного не вызывает и ключей не печатает. Plain Node, no dependencies (runs before npm install).
@@ -72,9 +72,13 @@ if (ffmpeg && ffprobe) ok(version(ffmpeg, ["-version"]) ?? "ffmpeg");
 else { bad(`ffmpeg/ffprobe не найдены — без них нет рендера и звука: ${hint("brew install ffmpeg", "sudo apt install ffmpeg")}`); fatal++; }
 
 const env = { ...dotenv(join(ROOT, ".env")), ...process.env };
+// Режиссёр — любой из двух агентов по подписке пользователя: Claude Code или Codex CLI.
 const claude = (env.CLAUDE_BIN && expandHome(env.CLAUDE_BIN)) || [join(homedir(), ".local/bin/claude")].find(existsSync) || which("claude");
-if (claude && version(claude)) ok(`Claude Code ${version(claude)} — режиссёр (по вашей подписке; войдите один раз: запустите claude)`);
-else warn("Claude Code CLI не найден — без него нет режиссёра: https://claude.com/claude-code (curl -fsSL https://claude.ai/install.sh | bash)");
+const codex = (env.CODEX_BIN && expandHome(env.CODEX_BIN)) || ["/opt/homebrew/bin/codex", "/usr/local/bin/codex", join(homedir(), ".local/bin/codex")].find(existsSync) || which("codex");
+const codexHome = env.CODEX_HOME ? expandHome(env.CODEX_HOME) : join(homedir(), ".codex");
+if (claude && version(claude)) ok(`Claude Code ${version(claude)} — режиссёр по подписке Claude (войдите один раз: запустите claude)`);
+if (codex && version(codex)) ok(`Codex CLI ${version(codex)} — режиссёр по подписке ChatGPT${existsSync(join(codexHome, "auth.json")) ? "" : " (войдите один раз: codex login)"}; картинки по подписке — IMAGE_PROVIDER=codex`);
+if (!(claude && version(claude)) && !(codex && version(codex))) { bad("нет агента-режиссёра — поставьте хотя бы один: Claude Code (curl -fsSL https://claude.ai/install.sh | bash) или Codex CLI (npm i -g @openai/codex)"); fatal++; }
 if (env.ANTHROPIC_API_KEY?.trim()) warn("задан ANTHROPIC_API_KEY — Claude Code будет списывать работу с API-счёта, а не с подписки");
 
 const blender = (env.BLENDER && expandHome(env.BLENDER)) || ["/opt/homebrew/bin/blender", "/usr/local/bin/blender", "/Applications/Blender.app/Contents/MacOS/Blender", "/usr/bin/blender", "/snap/bin/blender"].find(existsSync) || which("blender");
@@ -148,6 +152,6 @@ spawnSync(join(ROOT, "studio/bin/studio"), ["doctor"], { cwd: ROOT, stdio: "inhe
 console.log(fatal
   ? "\nНе хватает обязательного (✗ выше) — поставьте и запустите npm run setup ещё раз."
   : `\nГотово. Дальше:
-  claude                                    # в этой папке: «сделай ролик про …» (скилл make-video)
-  npm run make -- --brief examples/briefs/01-coffee-promo.md   # или целиком без окна`);
+  claude  или  codex                        # в этой папке: «сделай ролик про …» (скилл make-video)
+  npm run make -- --brief examples/briefs/01-coffee-promo.md   # или целиком без окна (--agent claude|codex)`);
 process.exit(fatal ? 1 : 0);
