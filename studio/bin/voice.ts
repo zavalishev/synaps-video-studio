@@ -47,11 +47,13 @@ const HEAD = num(a, "head") ?? 0.3;
 const LANG = str(a, "lang") ?? spec.lang ?? "ru";
 const OUT = str(a, "out", "voice.wav")!;
 
+// Знаки речи: цифра читается как слово («12» → «двенадцать»), поэтому идёт за три знака.
+const spoken = (text: string) => text.replace(/\d/g, "ddd").length;
+// Темп, от которого считает --estimate (знаков в секунду): спокойный диктор прошлых прогонов студии.
+const EST_CPS = 11.3;
+
 if (a.estimate) {
-  const est = (text: string, pace: number) => {
-    const chars = text.replace(/\d/g, "ddd").length;
-    return chars / 11.3 / Math.pow(Math.max(0.5, pace), 0.3);
-  };
+  const est = (text: string, pace: number) => spoken(text) / EST_CPS / Math.pow(Math.max(0.5, pace), 0.3);
   let tot = HEAD;
   spec.lines.forEach((l0, i) => {
     const l = typeof l0 === "string" ? { say: l0 } : l0;
@@ -202,7 +204,8 @@ const main = async () => {
   }));
   const timing = [...used].join(" + ");
   const wordsFile = OUT.replace(/\.wav$/, "") === "voice" ? "words.json" : OUT.replace(/\.wav$/, ".words.json");
-  writeFileSync(inJobStrict(dir, join("public", wordsFile), "тайминги"), JSON.stringify({ audio: OUT, total, lang: LANG, timing, lines, words, captions }, null, 1));
+  const charsPerSec = r3(lines.reduce((s0, l) => s0 + spoken(l.say), 0) / Math.max(0.1, lines.reduce((s0, l) => s0 + (l.end - l.start), 0)));
+  writeFileSync(inJobStrict(dir, join("public", wordsFile), "тайминги"), JSON.stringify({ audio: OUT, total, lang: LANG, timing, charsPerSec, lines, words, captions }, null, 1));
 
   if (!a["keep-duration"]) {
     const job = readJob(dir) as unknown as Record<string, unknown>;
@@ -213,7 +216,14 @@ const main = async () => {
   }
   const rough = used.has("пропорция");
   console.log(`public/${OUT}: ${total} с, ${lines.length} реплик, ${words.length} слов; тайминги слов: ${timing}${rough ? " (ВНИМАНИЕ: где пропорция — склейки по словам приблизительны, проверьте на слух/кадрах)" : ""}`);
-  for (const l of lines) console.log(`  ${l.id}: ${l.start.toFixed(2)}–${l.end.toFixed(2)} с  ${l.say.slice(0, 70)}`);
+  // Темп речи по факту (знаков в секунду звучания, без пауз между репликами): голоса сильно
+  // разнятся (системный голос macOS ≈ 14–15 зн/с против ≈ 11 у спокойного диктора), а зритель в
+  // ленте не перемотает назад. Это данные для режиссёра, решение — его: --pace, текст, паузы.
+  const cps = (l: { say: string; start: number; end: number }) => spoken(l.say) / Math.max(0.1, l.end - l.start);
+  const speech = lines.reduce((s0, l) => s0 + (l.end - l.start), 0);
+  const avg = lines.reduce((s0, l) => s0 + spoken(l.say), 0) / Math.max(0.1, speech);
+  for (const l of lines) console.log(`  ${l.id}: ${l.start.toFixed(2)}–${l.end.toFixed(2)} с  ${cps(l).toFixed(1)} зн/с  ${l.say.slice(0, 70)}`);
+  console.log(`темп речи: ${avg.toFixed(1)} зн/с в среднем, самая быстрая реплика ${Math.max(...lines.map(cps)).toFixed(1)} зн/с; оценка --estimate считала ${EST_CPS} зн/с. Быстрее, чем задумано, — --pace 0.85–0.95, короче текст или паузы (gap, after) там, где зрителю нужно успеть понять.`);
   console.log(`public/${wordsFile}`);
 };
 main().catch((e) => { console.error("ошибка: " + (e?.message ?? e)); process.exit(1); });

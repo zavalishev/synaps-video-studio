@@ -85,8 +85,11 @@ macOS. Впишите в `.env`:
 
 ```bash
 VOICE_PROVIDER=command
-VOICE_COMMAND=say -v Milena -f {text_file} -o {out_wav} --data-format=LEI16@22050
+VOICE_COMMAND=say -v Milena -r 150 -f {text_file} -o {out_wav} --data-format=LEI16@22050
 ```
+
+`-r 150` — слов в минуту: по умолчанию Milena говорит быстро (≈ 15 знаков в секунду), для
+объяснялки спокойнее 140–150.
 
 Голос Milena может понадобиться скачать: Системные настройки → Универсальный доступ → Устный
 контент → Системный голос → Управлять голосами. Проверка — `npm run doctor`.
@@ -237,7 +240,7 @@ ELEVENLABS_MODEL=eleven_multilingual_v2
 
 ```bash
 VOICE_PROVIDER=command
-# macOS, бесплатно:  VOICE_COMMAND=say -v Milena -f {text_file} -o {out_wav} --data-format=LEI16@22050
+# macOS, бесплатно:  VOICE_COMMAND=say -v Milena -r 150 -f {text_file} -o {out_wav} --data-format=LEI16@22050
 # Piper:             VOICE_COMMAND=piper --model ~/piper/ru_RU-irina-medium.onnx --output_file {out_wav} < {text_file}
 # свой сервер:       VOICE_COMMAND=curl -sf -X POST http://localhost:8020/tts --data-binary @{text_file} -o {out_wav}
 # своя обёртка:      VOICE_COMMAND=python3 ~/tts/my_tts.py --text-file {text_file} --out {out_wav}

@@ -94,6 +94,8 @@ VOICE_PROVIDER=command
 VOICE_COMMAND=say -v Samantha -f {text_file} -o {out_wav} --data-format=LEI16@22050
 ```
 
+`-r` sets words per minute: add `-r 160` for a calmer explainer pace (the default is brisk).
+
 (For Russian use `-v Milena`.) A voice may need downloading first: System Settings →
 Accessibility → Spoken Content → System voice → Manage Voices. Check with `npm run doctor`.
 
