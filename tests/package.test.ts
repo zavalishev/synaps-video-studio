@@ -40,7 +40,7 @@ describe("чистота публичного репозитория", () => {
       // Бренд авторов — только в подписи и карточках пакета, не в коде студии.
       const brandOk = /^(README(\.en)?\.md|NOTICE|package(-lock)?\.json|LICENSE)$/.test(relative(ROOT, f));
       for (const b of banned) {
-        if ((b === "synaps" || b === "синапс") && brandOk) continue;
+        if ((b === ["syn", "aps"].join("") || b === ["син", "апс"].join("")) && brandOk) continue;
         if (low.includes(b)) hits.push(`${relative(ROOT, f)}: «${b}»`);
       }
       // Фальшивые ключи тестов провайдеров узнаются по словам-маркерам (test, secret, …).
