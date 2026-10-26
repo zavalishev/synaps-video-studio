@@ -6,7 +6,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { DOTENV_KEYS, ENV_FILE } from "./_env";
-import { asrPlan, imageConfig, SECRET_VARS, voiceConfig } from "./_providers";
+import { asrPlan, imageConfig, musicConfig, SECRET_VARS, voiceConfig } from "./_providers";
 import { blenderBin, which, whisperBin, whisperModel } from "./_tools";
 import { agentStatus, installHint, pickAgent } from "./_agents";
 import { parseArgs } from "./_lib";
@@ -15,6 +15,7 @@ const a = parseArgs(process.argv.slice(2), ["json"]);
 const env = process.env;
 const voice = voiceConfig(env);
 const img = imageConfig(env);
+const mus = musicConfig(env);
 const wBin = whisperBin(env), wModel = whisperModel(env);
 const asr = asrPlan(env, { voiceTimestamps: voice.ready && voice.timestamps, whisper: Boolean(wBin && wModel) });
 const version = (bin: string | null, args: string[]) => {
@@ -53,7 +54,9 @@ const timingName: Record<string, string> = { voice: "из ответа озву�
 if (voice.ready) (asr[0] === "proportional" ? cannot : can).push(asr[0] === "proportional"
   ? "точных таймингов слов нет: склейки и субтитры по словам приблизительны (поставьте whisper.cpp или ключ OpenAI)"
   : `тайминги слов: ${asr.filter((s) => s !== "proportional").map((s) => timingName[s]).join(" → ")}`);
-can.push("сцены Remotion, кадры, рендер, проверки, звуки (studio sfx) и музыка (studio music) — локально и бесплатно");
+if (mus.ready) can.push(`музыка: генерация под ролик — studio music --make "описание" --sec N (или --plan по секциям${mus.plan ? "" : ", план уйдёт словами"}) через ${mus.provider} (${mus.model}) — ${mus.provider === "command" ? "своей программой" : "платно, вашим ключом"}; владелец её включил — своя музыка под ролик предпочтительнее каталога`);
+else if (mus.provider !== "none") cannot.push(`генерации музыки нет: ${mus.problem} — музыка только из каталога`);
+can.push("сцены Remotion, кадры, рендер, проверки, звуки (studio sfx) и музыка из каталога (studio music) — локально и бесплатно");
 const missing: string[] = [];
 if (!ffmpeg || !ffprobe) missing.push("ffmpeg/ffprobe — без них нет рендера и звука (macOS: brew install ffmpeg; Linux: apt install ffmpeg)");
 if (!claude && !codex) missing.push(`агент-режиссёр — нужен хотя бы один: ${installHint("claude")}; или ${installHint("codex")}`);
@@ -62,6 +65,7 @@ if (nodeMajor < 22) missing.push(`Node ${node} — нужен 22+ (лучше 24
 const report = {
   envFile: existsSync(ENV_FILE) ? ENV_FILE : null, fromEnvFile: DOTENV_KEYS.length,
   voice: { provider: voice.provider, model: voice.model, voice: voice.voice, ready: voice.ready, problem: voice.problem ?? null, timestamps: voice.timestamps, style: voice.style },
+  music: { provider: mus.provider, model: mus.model, ready: mus.ready, problem: mus.problem ?? null, plan: mus.plan },
   image: { provider: img.provider, model: img.model, ready: img.ready, problem: img.problem ?? null, transparency: img.transparency, refs: img.refs, bgRemover: img.bgRemover },
   timing: asr, keys,
   tools: { node, ffmpeg, ffprobe, blender: blenderOk ? blender : null, whisper: wBin && wModel ? { bin: wBin, model: wModel } : null, claude, codex },
@@ -78,6 +82,7 @@ L.push("");
 L.push("Провайдеры (.env)");
 L.push(`  озвучка   VOICE_PROVIDER=${voice.provider}  ${voice.ready ? `готово: ${voice.model}, голос ${voice.voice}${voice.timestamps ? ", тайминги слов в ответе" : ""}` : voice.problem}`);
 L.push(`  картинки  IMAGE_PROVIDER=${img.provider}  ${img.ready ? `готово: ${img.model}; прозрачность ${img.transparency ? "да" : img.bgRemover ? "через IMAGE_BG_COMMAND" : "нет"}, референсы ${img.refs ? "да" : "нет"}` : img.problem}`);
+L.push(`  музыка    MUSIC_PROVIDER=${mus.provider}  ${mus.ready ? `готово: ${mus.model}${mus.plan ? ", план по секциям" : ""}` : mus.problem}`);
 L.push(`  тайминги  ASR_PROVIDER=${env.ASR_PROVIDER || "auto"}  ${asr.map((s) => timingName[s]).join(" → ")}`);
 L.push(`  ключи     ${SECRET_VARS.map((k) => `${k} ${keys[k] ? "задан" : "—"}`).join(", ")}`);
 L.push("");

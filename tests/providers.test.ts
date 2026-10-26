@@ -4,10 +4,10 @@
 import { describe, expect, it } from "vitest";
 import { parseDotenv, loadDotenv } from "../studio/bin/_env";
 import {
-  asrPlan, charsToWords, image, imageConfig, ProviderError, ProviderNotConfigured, redact, retime,
+  asrPlan, charsToWords, checkPlan, image, imageConfig, music, musicConfig, musicKey, ProviderError, ProviderNotConfigured, redact, retime,
   transcribeOpenAI, tts, voiceConfig,
 } from "../studio/bin/_providers";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -263,5 +263,75 @@ describe("маскировка ключей", () => {
     const env = { OPENAI_API_KEY: "sk-proj-SECRETSECRETSECRET", ELEVENLABS_API_KEY: "elevenSECRET" };
     const s = redact("a sk-proj-SECRETSECRETSECRET b elevenSECRET c sk-otherkeyotherkeyother d AIzaSyAAAAAAAAAAAAAAAAAAAAAA", env);
     expect(s).not.toMatch(/SECRET|otherkeyotherkey|AIzaSyAAAA/);
+  });
+});
+
+describe("музыка", () => {
+  const env = { MUSIC_PROVIDER: "elevenlabs", ELEVENLABS_API_KEY: "elevenKEY" };
+  const mp3 = Buffer.alloc(4000, 1);
+  const plan = { styles: ["warm piano", "92 BPM"], avoid: ["drums"], sections: [
+    { name: "hook", styles: ["sparse"], sec: 4 }, { name: "build", styles: ["pulse"], sec: 12.5 }, { name: "outro", styles: ["resolve"], sec: 4 }] };
+  it("выключена по умолчанию; elevenlabs без ключа — называет, чего нет", () => {
+    expect(musicConfig({}).ready).toBe(false);
+    expect(musicConfig({ MUSIC_PROVIDER: "elevenlabs" }).problem).toMatch(/ELEVENLABS_API_KEY/);
+    expect(musicConfig(env)).toMatchObject({ ready: true, model: "music_v1", plan: true });
+  });
+  it("описание: POST /music, длина в мс, только инструментал, ключ в xi-api-key", async () => {
+    const { f, calls } = mockFetch(bytes(mp3));
+    const r = await music({ prompt: "warm piano, 92 BPM", seconds: 20 }, { env, fetch: f, sleep: noSleep.sleep });
+    expect(calls[0].url).toBe("https://api.elevenlabs.io/v1/music?output_format=mp3_44100_128");
+    expect(hdr(calls[0], "xi-api-key")).toBe("elevenKEY");
+    expect(body(calls[0])).toEqual({ model_id: "music_v1", prompt: "warm piano, 92 BPM", music_length_ms: 20000, force_instrumental: true });
+    expect(r.seconds).toBe(20);
+  });
+  it("план по секциям: composition_plan с длинами секций, без слов", async () => {
+    const { f, calls } = mockFetch(bytes(mp3));
+    const r = await music({ plan }, { env, fetch: f, sleep: noSleep.sleep });
+    const b = body(calls[0]);
+    expect(b.prompt).toBeUndefined();
+    expect(b.respect_sections_durations).toBe(true);
+    expect(b.composition_plan.positive_global_styles).toEqual(["warm piano", "92 BPM"]);
+    expect(b.composition_plan.negative_global_styles).toEqual(["drums", "vocals", "lyrics"]);
+    expect(b.composition_plan.sections.map((s: { duration_ms: number; lines: string[] }) => [s.duration_ms, s.lines.length])).toEqual([[4000, 0], [12500, 0], [4000, 0]]);
+    expect(r.seconds).toBe(20.5);
+  });
+  it("модель без плана — план уходит словами в prompt", async () => {
+    const { f, calls } = mockFetch(bytes(mp3));
+    await music({ plan }, { env: { ...env, ELEVENLABS_MUSIC_MODEL: "music_v2" }, fetch: f, sleep: noSleep.sleep });
+    const b = body(calls[0]);
+    expect(b.composition_plan).toBeUndefined();
+    expect(b.music_length_ms).toBe(20500);
+    expect(b.prompt).toMatch(/0–4 s hook: sparse; 4–17 s build: pulse/);
+  });
+  it("неверные запросы — понятная ошибка без сети", async () => {
+    const { f, calls } = mockFetch(bytes(mp3));
+    const d = { env, fetch: f, sleep: noSleep.sleep };
+    await expect(music({ prompt: "x", seconds: 20 }, d)).rejects.toThrow(/описание/);
+    await expect(music({ prompt: "warm piano", seconds: 500 }, d)).rejects.toThrow(/длина/);
+    await expect(music({ plan: { ...plan, sections: [{ name: "a", styles: [], sec: 1 }] } }, d)).rejects.toThrow(/sec от 3/);
+    await expect(music({ plan: { styles: [], sections: plan.sections } }, d)).rejects.toThrow(/styles/);
+    expect(calls).toHaveLength(0);
+    expect(checkPlan({ ...plan, sections: [{ name: "a\u0000b".repeat(40), styles: ["x"], sec: 5 }] }).sections[0].name.length).toBeLessThanOrEqual(60);
+  });
+  it("ключ кэша: тот же запрос — тот же ключ, другой провайдер или длина — другой", () => {
+    expect(musicKey({ prompt: "warm piano", seconds: 20 }, env)).toBe(musicKey({ prompt: " warm  piano ", seconds: 20 }, env));
+    expect(musicKey({ prompt: "warm piano", seconds: 20 }, env)).not.toBe(musicKey({ prompt: "warm piano", seconds: 21 }, env));
+    expect(musicKey({ prompt: "warm piano", seconds: 20 }, env)).not.toBe(musicKey({ prompt: "warm piano", seconds: 20 }, { ...env, ELEVENLABS_MUSIC_MODEL: "music_v2" }));
+  });
+  it("MUSIC_COMMAND: описание и план файлами, длина подставлена", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mus-"));
+    const cenv = { MUSIC_PROVIDER: "command", MUSIC_COMMAND: `cp {prompt_file} ${dir}/p.txt && cp {plan_file} ${dir}/plan.json && printf %s {seconds} > ${dir}/s.txt && head -c 3000 /dev/zero > {out_mp3}` };
+    expect(musicConfig(cenv)).toMatchObject({ ready: true, plan: true });
+    const r = await music({ prompt: "it's \"quoted\" piano", plan }, { env: cenv });
+    expect(r.audio.length).toBe(3000);
+    expect(readFileSync(join(dir, "p.txt"), "utf8")).toBe("it's \"quoted\" piano");
+    expect(JSON.parse(readFileSync(join(dir, "plan.json"), "utf8")).sections).toHaveLength(3);
+    expect(readFileSync(join(dir, "s.txt"), "utf8")).toBe("20.5");
+    expect(musicConfig({ MUSIC_PROVIDER: "command", MUSIC_COMMAND: "gen '{out_mp3}'" }).problem).toMatch(/кавычки/);
+  });
+  it("401 — без повторов, ключ замаскирован", async () => {
+    const { f, calls } = mockFetch(text("bad key elevenKEY", 401));
+    await expect(music({ prompt: "warm piano", seconds: 10 }, { env, fetch: f, sleep: noSleep.sleep })).rejects.toThrow(/HTTP 401.*\*\*\*/);
+    expect(calls).toHaveLength(1);
   });
 });

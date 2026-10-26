@@ -60,6 +60,10 @@ studio <инструмент> [аргументы]      — запускать �
   studio music [настроение] [--bpm 90-110] [--energy 3-5] | studio music --copy id
       каталог лицензированной музыки студии (public/music/catalog.json, CC0). Пуст — музыка
       открытым вопросом в notes.md; атмосфера места — bed.ts (sound-design).
+  studio music --make "описание" --sec 32 [--id имя] | studio music --plan music-plan.json [--id имя]
+      своя музыка под ролик (MUSIC_PROVIDER в .env, studio doctor). План по секциям:
+      {"styles":[…],"avoid":[…],"sections":[{"name","styles":[…],"sec"}]} — подъём на нужной секунде.
+      Трек → public/music/<id>.mp3; тот же запрос второй раз — из кэша, бесплатно.
 
   studio api <модуль> [имя]
       короткие подписи экспортов @studio/<модуль> (props компонентов, аргументы функций) —

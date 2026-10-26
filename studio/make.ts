@@ -44,7 +44,7 @@ import { join } from "node:path";
 import { createJob, JOBS, linkSkills, slugify } from "./bin/_job";
 import { die, num, parseArgs, ROOT, STUDIO, str } from "./bin/_lib";
 import { directorEnv, DOTENV_KEYS, ENV_FILE, shellSecrets } from "./bin/_env";
-import { imageConfig, voiceConfig } from "./bin/_providers";
+import { imageConfig, musicConfig, voiceConfig } from "./bin/_providers";
 import { pickAgent, type Agent, type Ev, type Res, type RunOpts, type Usage } from "./bin/_agents";
 import { codexLogin } from "./bin/_tools";
 import { studioSnapshot, studioChanges } from "./bin/_job";
@@ -77,8 +77,8 @@ if (AGENT.name === "codex" && (codexLogin() === "apikey" || process.env.CODEX_AP
 
 // Что подключено (studio doctor) — одной строкой в задаче директора, чтобы план ролика сразу
 // строился под имеющиеся провайдеры, а не упирался в «провайдер не настроен» посреди сборки.
-const vc = voiceConfig(), ic = imageConfig();
-const PROVIDERS = `Провайдеры: озвучка — ${vc.ready ? `${vc.provider} (${vc.model})` : `нет (${vc.problem})`}; картинки — ${ic.ready ? `${ic.provider} (${ic.model}${ic.transparency ? "" : ", без прозрачности"}${ic.refs ? "" : ", без --ref"})` : `нет (${ic.problem})`}. Подробно — \`studio doctor\`; чего нет — ролик строится без этого (CLAUDE.md «Провайдеры»).`;
+const vc = voiceConfig(), ic = imageConfig(), mc = musicConfig();
+const PROVIDERS = `Провайдеры: озвучка — ${vc.ready ? `${vc.provider} (${vc.model})` : `нет (${vc.problem})`}; картинки — ${ic.ready ? `${ic.provider} (${ic.model}${ic.transparency ? "" : ", без прозрачности"}${ic.refs ? "" : ", без --ref"})` : `нет (${ic.problem})`}; музыка — ${mc.ready ? `своя под ролик (studio music --make/--plan, ${mc.provider}) или каталог` : "каталог (studio music)"}. Подробно — \`studio doctor\`; чего нет — ролик строится без этого (CLAUDE.md «Провайдеры»).`;
 
 const RESULT_JSON = `Последнее сообщение — только JSON: {"final":"out/final.mp4","seconds":<длина>,"concept":"…","skills":["…"],"paid":{"tts":<n>,"images":<n>},"probe":"PASS|WARN|FAIL","critic":"<оценка критика 1–10 или null>","client_questions":["… — то же, что в notes.md «## Вопросы заказчику»: противоречия брифа, допущения, заглушки вместо настоящего товара/места/людей, обязательные пометки"],"open_issues":["…"]}`;
 const GUIDE = AGENT.name === "codex" ? "AGENTS.md" : "CLAUDE.md";
