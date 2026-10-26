@@ -367,7 +367,9 @@ const analyzeGuard = (guard: GuardHit[], fps: number, briefNums: Set<number>) =>
       const role = String((g.detail as { role?: string } | null)?.role ?? "");
       issues.push({ level: longest >= minRun && /cta|offer/.test(role) ? "FAIL" : "WARN", source: "guard", kind: g.kind, id: g.id, frames: span, msg: `«${g.id}»${role ? ` (${role})` : ""} в колонке кнопок ленты справа (нижняя половина кадра) ${g.frames.length} кадров — лайк/комментарии/звук закроют текст` });
     } else if (g.kind === "text-clipped") {
-      issues.push({ level: longest >= 6 ? "WARN" : "INFO", source: "guard", kind: g.kind, id: g.id, frames: span, msg: `«${g.id}»: буквы срезаны родителем (overflow) на ${g.worst}px, ${longest} кадров подряд — подпись шире своей плашки/блока ${det}` });
+      // Срезанные буквы, которые держатся (не кадр-другой анимации появления), — брак, который зритель
+      // видит сразу: FAIL, а не WARN (на проде такие ролики уходили в чат с обрезанной цитатой).
+      issues.push({ level: longest >= 6 ? "FAIL" : "INFO", source: "guard", kind: g.kind, id: g.id, frames: span, msg: `«${g.id}»: буквы срезаны родителем (overflow) на ${g.worst}px, ${longest} кадров подряд — подпись шире своей плашки/блока ${det}` });
     } else if (g.kind === "audit-misplaced") {
       issues.push({ level: "WARN", source: "guard", kind: g.kind, frames: span, msg: "FrameAudit не во весь кадр — положите его прямым ребёнком <Stage>" });
     } else {
