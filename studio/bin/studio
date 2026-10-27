@@ -7,7 +7,7 @@ ROOT="$(cd "$BIN/../.." && pwd)"
 TSX="$ROOT/node_modules/.bin/tsx"
 tool="$1"; [ $# -gt 0 ] && shift
 case "$tool" in
-  voice|image|blender|still|sheet|render|sfx|music|probe|check|fonts|new|api|skill|facts|looks|doctor)
+  voice|image|blender|still|sheet|render|sfx|music|probe|check|fonts|new|api|skill|facts|looks|doctor|rig)
     exec "$TSX" "$BIN/$tool.ts" "$@" ;;
   ""|help|-h|--help)
     sed -n '1,200p' "$BIN/USAGE.txt" ;;

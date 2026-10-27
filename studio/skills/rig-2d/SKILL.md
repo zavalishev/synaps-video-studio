@@ -1,0 +1,84 @@
+---
+name: rig-2d
+description: Скелетная (перекладная) анимация — герой из частей, нарисованных генератором картинок (богатый рисунок), на шарнирах в коде; готовые движения: ходьба, бег, прыжок со сплющиванием, взмах, указание, радость, удивление, сон, кивок, дрожь, речь со сменой рта, моргание и дыхание сами, запаздывание ушей и хвоста (`studio rig`, `@studio/rig`). Брать, когда нужен живой персонаж, который сам двигается, и рисунок уровня иллюстрации: сказка, маскот, предмет-персонаж (зерно, круассан, зуб), история с героем.
+---
+
+# rig-2d — герой из частей на шарнирах
+
+## Карточка
+
+**Зачем**: картинка даёт рисунок, но неподвижна; кукла кодом двигается, но рисунок беден.
+Здесь генератор рисует героя ПО ЧАСТЯМ, код собирает их на шарнирах и двигает готовыми
+движениями — как скелетная анимация в играх (Spine/Rive). Режиссёр решает, что герой делает
+и когда; суставы, инерцию, дыхание и моргание считает движок.
+
+**Путь (4 шага, ~3 мин)**:
+1. Лист частей — одна картинка `studio image … --size 1536x1024 --bg transparent --quality high`
+   (промпт ниже; `--ref` на лист персонажа, если он уже есть). Открой картинку Read-ом.
+2. `studio rig cut public/rig/<имя>-parts.png --name <имя>` (предмет-персонаж — с `--object
+   --limb "#цвет"`): части в public/rig/<имя>/, скелет-черновик rig.json, лист с подписями.
+3. `studio rig check public/rig/<имя>/rig.json --joints` → лист поз (rest, walk, wave, hop,
+   cheer, talk, surprise, sleep). Плечо оторвано, голова висит, нога торчит — поправь `at`
+   (точка на родителе) / `pivot` (сустав на части) / `z` в rig.json и снова check. 1–2 круга.
+4. В сцене:
+```tsx
+import rig from "../../public/rig/bear/rig.json";
+import { Rig, talkFromWords, type RigDef } from "@studio/rig";
+import words from "../../public/words.json";
+<Rig rig={rig as RigDef} x={540} y={1650} height={820} actions={[
+  { do: "walk", at: 0.2, to: [620, 1650] },          // ходьба к точке (скорость сама; dur — свой темп)
+  { do: "surprise", at: 1.9 }, { do: "wave", at: 2.4, arm: "R" },
+  { do: "hop", at: 4 }, { do: "cheer", at: 5, dur: 1.2 },
+  ...talkFromWords(words, { ids: ["hello"], offset: 0 /* начало сцены, с */ }),
+]} />
+```
+x, y — точка на земле под героем (ставь на пол фона), height — рост в px (герой ≥ 35–45 %
+высоты кадра). Время действий — секунды от начала сцены.
+
+**Действия**: `walk`/`run`/`move` {to, dur?, face?} · `hop` {h?} · `wave`/`point` {arm: "L"|"R",
+angle?} · `cheer` · `talk` {dur} · `surprise` · `sleep` {dur} · `look` {angle} · `nod` ·
+`shiver` · `turn` {facing: 1|-1} · `pose` {angles: {armL: 90, head: -10, …}, lean?, dy?, alt?,
+dur, ease?} — своя ключевая поза (руки/ноги — градусы «наружу»: 0 вниз, 90 в сторону, 180
+вверх). Действия накладываются (идёт и говорит, машет и подпрыгивает).
+
+**Промпт листа (человек/зверь)**: «Cutout animation puppet parts sheet of ONE character: <кто,
+одежда, приметы>, <стиль из theme.json>. Draw the character DISASSEMBLED into separate body parts
+on a transparent background with wide empty gaps (no part touches another): top row — the head
+facing the viewer (no neck), the same head with eyes closed, the same head with mouth wide open;
+middle — the torso with clothes (no arms, legs, head), left of it the left arm hanging straight
+down (shoulder at top), right of it the right arm hanging straight down; bottom row — left leg and
+right leg standing straight (hip at top, foot at bottom). Each part whole, rounded at the joint
+end. No text, no labels, no shadows, no background.»
+**Предмет-персонаж** (`--object`): «… the SAME <предмет> character three times in a single row with
+wide gaps: eyes open smiling; eyes closed; mouth wide open. Body only — NO arms, NO legs …» —
+ручки-ножки рисует код (hose: цвет `--limb`, толщина, длина — в rig.json).
+
+**Правила**:
+- Фон — та же рука: тот же `imagePromptSuffix` и стиль, что у листа; свет фона ≈ свет героя
+  (`filter` у Rig подстроит тон), тень под ногами есть сама.
+- Герой всегда жив: между событиями — дыхание и моргание сами; не держи его «на паузе» дольше
+  2 с без действия — `look`, `nod`, переступить (`move` на 20–40 px).
+- Событие истории = действие героя в кадре (испугался — `surprise`, обрадовался — `cheer`,
+  уснул — `sleep`), а не надпись.
+- Говорит — `talkFromWords` по его репликам (рот меняется по словам).
+- Один лист на героя на весь ролик: тот же rig.json во всех сценах — герой одинаковый.
+
+**Ловушки**: части на листе касаются друг друга — cut склеит их (переделай лист: «wide gaps»);
+лишние части (тень, надпись) — в rig.json попадут в `unused`, их можно удалить; ореол по краю
+снимается при резке; рука при `wave` уходит за голову — z руки 1 вместо -1 (тогда плечо видно,
+поправь `at`). Герой в профиль — `"view": "side"` в rig.json (шаг вразмах).
+
+## Подробности
+
+Скелет `rig.json`: `parts` — часть → { src, w, h, parent, at: [x, y] на родителе, pivot: [x, y]
+своего сустава, z, rest (исходный угол), alt: { blink, talk } (сменные картинки того же размера),
+follow 0..1 (уши, хвост, волосы — отстают и покачиваются), hose: { len, width, color, outline?,
+endR?, endColor? } (резиновая конечность кодом) }. Корень — часть без parent (туловище), его
+pivot — бёдра. Дети резиновой конечности крепятся к её концу.
+
+Имена, которые знают движения: torso, head, armL, armR, legL, legR (L — слева на экране),
+вторые звенья forearmL/R, shinL/R — по желанию (лист с локтями и коленями отдельно). Нет head —
+моргание и рот берутся из alt туловища (предмет-персонаж).
+
+Математика — чистая функция кадра (`@studio/rig` → evaluate, drawList): рендер параллелится,
+`studio rig check` рисует те же позы без Remotion.
