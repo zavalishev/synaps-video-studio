@@ -7,7 +7,7 @@ import {
   asrPlan, charsToWords, checkPlan, image, imageConfig, music, musicConfig, musicKey, ProviderError, ProviderNotConfigured, redact, retime,
   transcribeOpenAI, tts, voiceConfig,
 } from "../studio/bin/_providers";
-import { groupLines, speechTokens, splitJoint, stripTags } from "../studio/bin/_voicejoin";
+import { groupLines, maskTags, speechTokens, splitJoint, stripTags } from "../studio/bin/_voicejoin";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -352,6 +352,13 @@ describe("озвучка одним заходом и пометки испол�
     expect(stripTags("[sad] Мне больно. [sighs]  Теперь — иначе.")).toBe("Мне больно. Теперь — иначе.");
     expect(stripTags("Цена [не пометка, а длинный текст в скобках больше сорока знаков точно]")).toContain("[не пометка");
     expect(speechTokens("[warmly] Крёстная — только пока?")).toEqual(["Крёстная", "только", "пока?"]);
+    expect(stripTags("Сноска [1] и [см. выше] — текст")).toBe("Сноска [1] и [см. выше] — текст");
+  });
+  it("maskTags: многословная и слитная пометка не попадает в слова", () => {
+    const text = "[speaks softly] Мне[sad] больно.";
+    const chars = [...text];
+    const t = chars.map((_, i) => i * 0.1);
+    expect(charsToWords(maskTags(chars), t, t).map((w) => w.text)).toEqual(["Мне", "больно."]);
   });
   it("splitJoint: реплики по словам, вздох из пометки остаётся у своей реплики", () => {
     const texts = ["[warmly] Привет, это я.", "[sad] [sighs] Как дела?"];

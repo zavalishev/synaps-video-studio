@@ -4,10 +4,19 @@
 // ElevenLabs eleven_v3, вслух они не читаются; в субтитры и тайминги не попадают.
 import type { TimedWord } from "./_tts";
 
-export const TAG_RE = /\[[^[\]\n]{1,40}\]/g;
+// Пометка — латинские слова в скобках ([sighs], [speaks softly]); «[1]» или «[см. выше]» — обычный текст.
+export const TAG_RE = /\[[A-Za-z][A-Za-z' -]{0,39}\]/g;
 export const stripTags = (s: string) => s.replace(TAG_RE, " ").replace(/\s+/g, " ").trim();
-export const isTagWord = (w: string) => /^\[[^[\]]{1,40}\]$/.test(w.trim());
-const leadsWithTag = (s: string) => /^\s*\[[^[\]\n]{1,40}\]/.test(s);
+export const isTagWord = (w: string) => /^\[[A-Za-z][A-Za-z' -]{0,39}\]$/.test(w.trim());
+const leadsWithTag = (s: string) => /^\s*\[[A-Za-z][A-Za-z' -]{0,39}\]/.test(s);
+/** Символы внутри пометок — пробелами (для разметки посимвольных таймингов). */
+export const maskTags = (chars: string[]): string[] => {
+  const at: number[] = [];   // смещение каждого элемента в склеенной строке (элемент может быть длиннее 1)
+  let pos = 0;
+  for (const c of chars) { at.push(pos); pos += c.length; }
+  const spans = [...chars.join("").matchAll(TAG_RE)].map((m) => [m.index!, m.index! + m[0].length]);
+  return chars.map((c, i) => spans.some(([a, b]) => at[i] >= a && at[i] < b) ? " " : c);
+};
 
 export const norm = (s: string) => s.toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}]/gu, "");
 /** Слова реплики, которые звучат (без пометок и одиночных знаков). */

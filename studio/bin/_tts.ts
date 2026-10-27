@@ -3,6 +3,7 @@
 import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { deps, fetchRetry, need, pick, ProviderError, ProviderNotConfigured, runCommand, short, templateProblem, tmp, type D, type Deps, type Env } from "./_http";
+import { maskTags } from "./_voicejoin";
 
 export type VoiceConfig = {
   provider: string; model: string; voice: string;
@@ -107,7 +108,8 @@ const ttsElevenLabs = async (req: TtsRequest, cfg: VoiceConfig, d: D): Promise<T
     const j = await res.json() as { audio_base64?: string; alignment?: { characters: string[]; character_start_times_seconds: number[]; character_end_times_seconds: number[] } | null };
     if (!j.audio_base64) throw new ProviderError("озвучка ElevenLabs: в ответе нет audio_base64");
     const al = j.alignment;
-    const words = al ? charsToWords(al.characters, al.character_start_times_seconds, al.character_end_times_seconds) : undefined;
+    // Пометки исполнения не звучат словами — в тайминги не берём (и многословные, и слитные с текстом).
+    const words = al ? charsToWords(maskTags(al.characters), al.character_start_times_seconds, al.character_end_times_seconds) : undefined;
     return { audio: Buffer.from(j.audio_base64, "base64"), ext: "mp3", words };
   } catch (e) {
     // Нет конечной точки с таймингами (прокси, совместимый сервер) — обычная озвучка, тайминги — ASR.
