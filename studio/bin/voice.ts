@@ -12,9 +12,15 @@
 // Голос: --voice, иначе "voice" из lines.json, иначе голос из .env (OPENAI_TTS_VOICE,
 // ELEVENLABS_VOICE_ID — в том числе свой клон, VOICE_COMMAND_VOICE). --style понимают не все
 // провайдеры (studio doctor) — без него подача задаётся текстом и пунктуацией.
-// Каждая реплика озвучивается отдельно (платный вызов, кэш .cache/tts по провайдеру+модели+
-// голосу+стилю+тексту — повтор бесплатный), тишина по краям срезается, темп pace (atempo),
-// между репликами пауза gap (или after/before реплики). Тайминги слов: из ответа озвучки
+// Реплики подряд с одним голосом и подачей озвучиваются ОДНИМ заходом (до 900 знаков) — интонация
+// идёт связной речью, а не набором объявлений; запись режется на реплики по таймингам слов.
+// Без таймингов в ответе (или "joint": false в lines.json, VOICE_JOINT=0) — по одной реплике.
+// Пометки исполнения в тексте реплики — [warmly], [softly], [sad], [sighs], [laughs]… (по-английски,
+// в квадратных скобках): их понимает eleven_v3 (studio doctor: «пометки исполнения работают»),
+// вслух они не читаются и в субтитры не попадают; модель, которая их не понимает, получает текст без них.
+// Платный вызов кэшируется в .cache/tts по провайдеру+модели+голосу+стилю+тексту — повтор бесплатный;
+// правка одной реплики переозвучивает её заход целиком. Темп pace (atempo растягивает запись:
+// ниже 0.92 звучит механически), между репликами пауза gap (или after/before). Тайминги слов: из ответа озвучки
 // (ElevenLabs, своя команда), иначе whisper.cpp локально, иначе OpenAI transcription (если
 // есть ключ), иначе пропорционально длине слов; всё выравнивается по тексту сценария.
 // words.json: {audio, total, lang, timing, lines:[{id,say,start,end,words}], words:[{text,start,end,line}],
@@ -27,9 +33,10 @@ import { cacheDir, ff, ffprobeDuration, sha } from "./_media";
 import { asrPlan, OPENAI_VOICES, retime, transcribeOpenAI, tts, voiceConfig, whisperLocal, type TimedWord } from "./_providers";
 import { whisperBin, whisperModel } from "./_tools";
 import { die, inJobStrict, jobDir, num, parseArgs, readJob, str } from "./_lib";
+import { groupLines, norm, splitJoint, stripTags, type Segment } from "./_voicejoin";
 
 type LineIn = string | { id?: string; say: string; voice?: string; style?: string; pace?: number; before?: number; after?: number };
-type Spec = { voice?: string; style?: string; pace?: number; gap?: number; lang?: string; lines: LineIn[] };
+type Spec = { voice?: string; style?: string; pace?: number; gap?: number; lang?: string; joint?: boolean; lines: LineIn[] };
 type Word = TimedWord;
 
 const a = parseArgs(process.argv.slice(2), ["keep-duration", "estimate"]);
@@ -48,7 +55,8 @@ const LANG = str(a, "lang") ?? spec.lang ?? "ru";
 const OUT = str(a, "out", "voice.wav")!;
 
 // Знаки речи: цифра читается как слово («12» → «двенадцать»), поэтому идёт за три знака.
-const spoken = (text: string) => text.replace(/\d/g, "ddd").length;
+// Пометки исполнения не звучат и не считаются.
+const spoken = (text: string) => stripTags(text).replace(/\d/g, "ddd").length;
 // Темп, от которого считает --estimate (знаков в секунду): спокойный диктор прошлых прогонов студии.
 const EST_CPS = 11.3;
 
@@ -60,9 +68,9 @@ if (a.estimate) {
     const d = est(l.say, l.pace ?? PACE);
     const after = l.after ?? (i < spec.lines.length - 1 ? GAP : 0);
     tot += (l.before ?? 0) + d + after;
-    console.log(`  ${String(i + 1).padStart(2)} ${d.toFixed(1)} с — ${l.say.slice(0, 70)}`);
+    console.log(`  ${String(i + 1).padStart(2)} ${d.toFixed(1)} с — ${stripTags(l.say).slice(0, 70)}`);
   });
-  const words = spec.lines.reduce((n, l0) => n + (typeof l0 === "string" ? l0 : l0.say).split(/\s+/).filter(Boolean).length, 0);
+  const words = spec.lines.reduce((n, l0) => n + stripTags(typeof l0 === "string" ? l0 : l0.say).split(/\s+/).filter(Boolean).length, 0);
   console.log(`оценка: ≈ ${tot.toFixed(1)} с голоса (±10 %), ${words} слов, ${(words / tot).toFixed(2)} слова/с; темп ${PACE}. Это без озвучки — правьте текст до платного прогона.`);
   if (!cfg.ready) console.log(`внимание: ${cfg.problem} — озвучить не получится (studio doctor).`);
   process.exit(0);
@@ -85,10 +93,15 @@ if (STYLE && !cfg.style) console.error(`провайдер ${cfg.provider} (${cf
 const wBin = whisperBin(), wModel = whisperModel();
 const plan = asrPlan(process.env, { voiceTimestamps: cfg.timestamps, whisper: Boolean(wBin && wModel) });
 
-const norm = (s: string) => s.toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}]/gu, "");
+// Что уходит провайдеру: пометки исполнения — только модели, которая их понимает.
+const sendText = (say: string) => cfg.tags ? say.trim().replace(/\s+/g, " ") : stripTags(say);
+const JOINT = cfg.timestamps && spec.joint !== false && process.env.VOICE_JOINT?.trim() !== "0";
+const JOINT_MAX = 900;
 
 type Take = { wav: string; words?: Word[] };
-const take = async (text: string, voice: string, style: string | undefined, pace: number): Promise<Take> => {
+type Raw = { src: string; key: string; words?: Word[] };
+// Платный вызов (или кэш): исходная запись провайдера и тайминги слов в ней.
+const fetchRaw = async (text: string, voice: string, style: string | undefined): Promise<Raw> => {
   const key = sha([cfg.tag, voice, cfg.style ? style ?? "" : "", LANG, text].join("|"));
   const metaFile = join(cacheDir("tts"), `${key}.json`);
   let meta: { file: string; words?: Word[] } | null = null;
@@ -102,7 +115,12 @@ const take = async (text: string, voice: string, style: string | undefined, pace
     meta = { file: f, ...(r.words?.length ? { words: r.words } : {}) };
     writeFileSync(metaFile, JSON.stringify(meta));
   }
-  const src = join(cacheDir("tts"), meta.file);
+  return { src: join(cacheDir("tts"), meta.file), key, words: meta.words };
+};
+
+// Реплика отдельным вызовом: тишина по краям срезается, темп — atempo.
+const take = async (text: string, voice: string, style: string | undefined, pace: number): Promise<Take> => {
+  const { src, key, words } = await fetchRaw(text, voice, style);
   const wav = join(cacheDir("tts"), `${key}-st${pace.toFixed(3)}.wav`);
   if (!existsSync(wav)) {
     ff(["-i", src, "-af",
@@ -110,7 +128,39 @@ const take = async (text: string, voice: string, style: string | undefined, pace
       "-ar", "48000", "-ac", "1", wav + ".tmp.wav"]);
     renameSync(wav + ".tmp.wav", wav);
   }
-  return { wav, words: meta.words ? retime(meta.words, pace, ffprobeDuration(wav)) : undefined };
+  return { wav, words: words ? retime(words, pace, ffprobeDuration(wav)) : undefined };
+};
+
+// Кусок общей записи — одна реплика: края с короткой подтяжкой громкости (без щелчков), темп — atempo.
+const cut = (r: Raw, seg: Segment, pace: number): Take => {
+  const len = seg.end - seg.start;
+  const wav = join(cacheDir("tts"), `${r.key}-j${seg.start.toFixed(3)}-${seg.end.toFixed(3)}-st${pace.toFixed(3)}.wav`);
+  if (!existsSync(wav)) {
+    ff(["-ss", seg.start.toFixed(3), "-t", len.toFixed(3), "-i", r.src, "-af",
+      `afade=t=in:d=0.01,afade=t=out:st=${Math.max(0, len - 0.03).toFixed(3)}:d=0.03,atempo=${pace}`,
+      "-ar", "48000", "-ac", "1", wav + ".tmp.wav"]);
+    renameSync(wav + ".tmp.wav", wav);
+  }
+  const p = Math.max(0.25, pace);
+  return { wav, words: seg.words.map((w) => ({ text: w.text, start: w.start / p, end: w.end / p })) };
+};
+
+type Line = { send: string; voice: string; style?: string; pace: number };
+let jointLines = 0;
+// Реплики подряд с тем же голосом и подачей — одним заходом; не разрезалось по словам — по одной.
+const takesFor = async (ls: Line[]): Promise<Take[]> => {
+  const out: Take[] = new Array(ls.length);
+  const groups = JOINT ? groupLines(ls.map((l) => ({ text: l.send, key: `${l.voice}\u0000${l.style ?? ""}` })), JOINT_MAX) : ls.map((_, i) => [i]);
+  for (const g of groups) {
+    if (g.length > 1) {
+      const r = await fetchRaw(g.map((i) => ls[i].send).join(" "), ls[g[0]].voice, ls[g[0]].style);
+      const segs = r.words?.length ? splitJoint(g.map((i) => ls[i].send), r.words, ffprobeDuration(r.src)) : null;
+      if (segs) { g.forEach((i, j) => { out[i] = cut(r, segs[j], ls[i].pace); }); jointLines += g.length; continue; }
+      console.error(`озвучка одним заходом не разрезалась по словам (реплики ${g[0] + 1}–${g[g.length - 1] + 1}) — озвучиваю их по одной`);
+    }
+    for (const i of g) out[i] = await take(ls[i].send, ls[i].voice, ls[i].style, ls[i].pace);
+  }
+  return out;
 };
 
 // Что услышано в реплике — по плану источников; null — только пропорция.
@@ -174,21 +224,28 @@ const main = async () => {
   const r3 = (x: number) => Math.round(x * 1000) / 1000;
   const parts: string[] = [];
   const lines: Array<{ id: string; say: string; start: number; end: number; words: Array<Word & { line: number }> }> = [];
+  const specLines = spec.lines.map((l0, i) => {
+    const l = typeof l0 === "string" ? { say: l0 } : l0;
+    if (typeof l.say !== "string" || !stripTags(l.say)) die(`реплика ${i}: пустой текст`);
+    return l;
+  });
+  const takes = await takesFor(specLines.map((l) => ({
+    send: sendText(l.say), voice: l.voice ? voiceFor(l.voice) : VOICE, style: l.style ?? STYLE, pace: l.pace ?? PACE,
+  })));
   let t = 0;
   if (HEAD > 0) { parts.push(silence(HEAD)); t += HEAD; }
-  for (let i = 0; i < spec.lines.length; i++) {
-    const l0 = spec.lines[i];
-    const l = typeof l0 === "string" ? { say: l0 } : l0;
-    if (!l.say?.trim()) die(`реплика ${i}: пустой текст`);
+  for (let i = 0; i < specLines.length; i++) {
+    const l = specLines[i];
+    const say = stripTags(l.say);
     const before = l.before ?? 0;
     if (before > 0) { parts.push(silence(before)); t += before; }
-    const tk = await take(l.say.trim(), l.voice ? voiceFor(l.voice) : VOICE, l.style ?? STYLE, l.pace ?? PACE);
+    const tk = takes[i];
     const d = ffprobeDuration(tk.wav);
-    const words = align(l.say.trim(), d, await hear(tk)).map((w) => ({ text: w.text, start: r3(t + w.start), end: r3(t + w.end), line: i }));
-    lines.push({ id: l.id ?? `l${i + 1}`, say: l.say.trim(), start: r3(t), end: r3(t + d), words });
+    const words = align(say, d, await hear(tk)).map((w) => ({ text: w.text, start: r3(t + w.start), end: r3(t + w.end), line: i }));
+    lines.push({ id: l.id ?? `l${i + 1}`, say, start: r3(t), end: r3(t + d), words });
     parts.push(tk.wav);
     t += d;
-    const after = l.after ?? (i < spec.lines.length - 1 ? GAP : 0);
+    const after = l.after ?? (i < specLines.length - 1 ? GAP : 0);
     if (after > 0) { parts.push(silence(after)); t += after; }
   }
 
@@ -216,6 +273,7 @@ const main = async () => {
   }
   const rough = used.has("пропорция");
   console.log(`public/${OUT}: ${total} с, ${lines.length} реплик, ${words.length} слов; тайминги слов: ${timing}${rough ? " (ВНИМАНИЕ: где пропорция — склейки по словам приблизительны, проверьте на слух/кадрах)" : ""}`);
+  console.log(`одним заходом (связная речь): ${jointLines} из ${lines.length} реплик${cfg.tags ? "; пометки исполнения [..] работают" : "; пометки [..] этой модели не передаются"}`);
   // Темп речи по факту (знаков в секунду звучания, без пауз между репликами): голоса сильно
   // разнятся (системный голос macOS ≈ 14–15 зн/с против ≈ 11 у спокойного диктора), а зритель в
   // ленте не перемотает назад. Это данные для режиссёра, решение — его: --pace, текст, паузы.
@@ -223,7 +281,7 @@ const main = async () => {
   const speech = lines.reduce((s0, l) => s0 + (l.end - l.start), 0);
   const avg = lines.reduce((s0, l) => s0 + spoken(l.say), 0) / Math.max(0.1, speech);
   for (const l of lines) console.log(`  ${l.id}: ${l.start.toFixed(2)}–${l.end.toFixed(2)} с  ${cps(l).toFixed(1)} зн/с  ${l.say.slice(0, 70)}`);
-  console.log(`темп речи: ${avg.toFixed(1)} зн/с в среднем, самая быстрая реплика ${Math.max(...lines.map(cps)).toFixed(1)} зн/с; оценка --estimate считала ${EST_CPS} зн/с. Быстрее, чем задумано, — --pace 0.85–0.95, короче текст или паузы (gap, after) там, где зрителю нужно успеть понять.`);
+  console.log(`темп речи: ${avg.toFixed(1)} зн/с в среднем, самая быстрая реплика ${Math.max(...lines.map(cps)).toFixed(1)} зн/с; оценка --estimate считала ${EST_CPS} зн/с. Быстрее, чем задумано, — короче текст, паузы (gap, after) там, где зрителю нужно успеть понять, многоточие и тире в тексте${cfg.tags ? ", пометки [slowly]/[softly]" : ""}; --pace растягивает готовую запись — ниже 0.92 голос звучит механически.`);
   console.log(`public/${wordsFile}`);
 };
 main().catch((e) => { console.error("ошибка: " + (e?.message ?? e)); process.exit(1); });

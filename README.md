@@ -197,7 +197,7 @@ Claude Code и для Codex) и скиллы в `.claude/skills/` и `.agents/sk
 | Провайдер | Что умеет | Ключи в `.env` |
 |---|---|---|
 | OpenAI TTS | указания диктору (`--style`), 13 голосов | `OPENAI_API_KEY`, `OPENAI_TTS_MODEL`, `OPENAI_TTS_VOICE` |
-| ElevenLabs | свой клонированный голос, тайминги слов вместе с аудио | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL` |
+| ElevenLabs | свой клонированный голос, тайминги слов вместе с аудио; `eleven_v3` — пометки исполнения (`[warmly]`, `[sighs]`) | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL` |
 | OpenAI Images | прозрачный фон, референсы `--ref` | `OPENAI_API_KEY`, `OPENAI_IMAGE_MODEL` |
 | Google Gemini | референсы; прозрачности нет (фон убирает `IMAGE_BG_COMMAND`, например rembg) | `GEMINI_API_KEY`, `GEMINI_IMAGE_MODEL` |
 | Codex (подписка ChatGPT) | прозрачный фон, референсы `--ref`; ключ не нужен, расход — лимит подписки | — (вход: `codex login`) |
@@ -219,10 +219,15 @@ Professional Voice Clone — от Creator.
 VOICE_PROVIDER=elevenlabs
 ELEVENLABS_API_KEY=ваш_ключ
 ELEVENLABS_VOICE_ID=id_вашего_голоса
-ELEVENLABS_MODEL=eleven_multilingual_v2
+ELEVENLABS_MODEL=eleven_v3
 ```
 
-Тайминги слов ElevenLabs отдаёт вместе с аудио, whisper для субтитров не нужен.
+Тайминги слов ElevenLabs отдаёт вместе с аудио, whisper для субтитров не нужен. Реплики одного
+голоса студия озвучивает одним заходом и режет по словам — интонация идёт связной речью, а не
+отдельными объявлениями. С `eleven_v3` режиссёр расставляет пометки исполнения (`[softly]`,
+`[sad]`, `[sighs]`): вслух они не читаются и в субтитры не попадают. Для русской речи берите
+голос, для которого русский родной (в библиотеке ElevenLabs — фильтр Language: Russian):
+англоязычный голос читает по-русски с акцентом и ровной интонацией.
 
 Тот же ключ даёт и **музыку под ролик** (ElevenLabs Music, на платном плане её можно
 публиковать): добавьте `MUSIC_PROVIDER=elevenlabs`. Режиссёр опишет трек по частям ролика

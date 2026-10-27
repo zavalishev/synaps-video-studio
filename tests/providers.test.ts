@@ -7,6 +7,7 @@ import {
   asrPlan, charsToWords, checkPlan, image, imageConfig, music, musicConfig, musicKey, ProviderError, ProviderNotConfigured, redact, retime,
   transcribeOpenAI, tts, voiceConfig,
 } from "../studio/bin/_providers";
+import { groupLines, speechTokens, splitJoint, stripTags } from "../studio/bin/_voicejoin";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -132,7 +133,7 @@ describe("озвучка ElevenLabs", () => {
     const r = await tts({ text: "Да нет", lang: "ru" }, { env: { ...env, ELEVENLABS_STABILITY: "0.4" }, fetch: f });
     expect(calls[0].url).toBe("https://api.elevenlabs.io/v1/text-to-speech/myClonedVoice/with-timestamps?output_format=mp3_44100_128");
     expect(hdr(calls[0], "xi-api-key")).toBe(env.ELEVENLABS_API_KEY);
-    expect(body(calls[0])).toEqual({ text: "Да нет", model_id: "eleven_multilingual_v2", voice_settings: { stability: 0.4 } });
+    expect(body(calls[0])).toEqual({ text: "Да нет", model_id: "eleven_v3", voice_settings: { stability: 0.4 } });
     expect(r.audio.toString()).toBe("ID3x");
     expect(r.words).toEqual([{ text: "Да", start: 0.1, end: 0.3 }, { text: "нет", start: 0.4, end: 0.7 }]);
     expect(voiceConfig(env).timestamps).toBe(true);
@@ -333,5 +334,53 @@ describe("музыка", () => {
     const { f, calls } = mockFetch(text("bad key elevenKEY", 401));
     await expect(music({ prompt: "warm piano", seconds: 10 }, { env, fetch: f, sleep: noSleep.sleep })).rejects.toThrow(/HTTP 401.*\*\*\*/);
     expect(calls).toHaveLength(1);
+  });
+});
+
+describe("озвучка одним заходом и пометки исполнения", () => {
+  const W = (text: string, start: number, end: number) => ({ text, start, end });
+  it("пометки понимает только eleven_v3 (и своя команда с VOICE_TAGS=1)", () => {
+    const el = { VOICE_PROVIDER: "elevenlabs", ELEVENLABS_API_KEY: "k", ELEVENLABS_VOICE_ID: "v" };
+    expect(voiceConfig(el).tags).toBe(true);
+    expect(voiceConfig({ ...el, ELEVENLABS_MODEL: "eleven_multilingual_v2" }).tags).toBe(false);
+    const cmd = { VOICE_PROVIDER: "command", VOICE_COMMAND: "say {text_file} {out_wav} {words_json}" };
+    expect(voiceConfig(cmd).tags).toBe(false);
+    expect(voiceConfig({ ...cmd, VOICE_TAGS: "1" }).tags).toBe(true);
+    expect(voiceConfig({ VOICE_PROVIDER: "openai", OPENAI_API_KEY: "k" }).tags).toBe(false);
+  });
+  it("stripTags: пометки вырезаются, текст и пунктуация остаются", () => {
+    expect(stripTags("[sad] Мне больно. [sighs]  Теперь — иначе.")).toBe("Мне больно. Теперь — иначе.");
+    expect(stripTags("Цена [не пометка, а длинный текст в скобках больше сорока знаков точно]")).toContain("[не пометка");
+    expect(speechTokens("[warmly] Крёстная — только пока?")).toEqual(["Крёстная", "только", "пока?"]);
+  });
+  it("splitJoint: реплики по словам, вздох из пометки остаётся у своей реплики", () => {
+    const texts = ["[warmly] Привет, это я.", "[sad] [sighs] Как дела?"];
+    const heard = [W("[warmly]", 0, 0.06), W("Привет,", 0.07, 0.96), W("это", 1.04, 1.28), W("я.", 1.4, 1.6),
+      W("[sad]", 2.16, 2.86), W("[sighs]", 2.89, 3.2), W("Как", 3.26, 3.44), W("дела?", 3.52, 3.92)];
+    const s = splitJoint(texts, heard, 4.1)!;
+    expect(s).toHaveLength(2);
+    expect(s[0].start).toBe(0);
+    expect(s[0].words.map((w) => w.text)).toEqual(["Привет,", "это", "я."]);
+    expect(s[1].start).toBeCloseTo(1.68, 2);        // сразу после «я.» — вздох до «Как» внутри второй реплики
+    expect(s[0].end).toBeCloseTo(1.68, 2);
+    expect(s[1].end).toBeCloseTo(4.1, 2);
+    expect(s[1].words[0].text).toBe("Как");
+    expect(s[1].words[0].start).toBeCloseTo(1.58, 2);
+  });
+  it("splitJoint: без пометки естественная пауза между фразами срезается до вдоха", () => {
+    const s = splitJoint(["Раз два.", "Три."], [W("Раз", 0.1, 0.3), W("два.", 0.35, 0.7), W("Три.", 1.5, 1.8)], 2)!;
+    expect(s[0].start).toBeCloseTo(0.04, 2);
+    expect(s[1].start).toBeCloseTo(1.41, 2);
+    expect(s[0].end).toBeCloseTo(0.85, 2);
+  });
+  it("splitJoint: слова не совпали со сценарием — null (тогда по одной реплике)", () => {
+    expect(splitJoint(["Раз два.", "Три."], [W("Раз", 0, 0.2), W("Три.", 0.3, 0.5)], 1)).toBeNull();
+    expect(splitJoint(["Раз два.", "Три."], [W("Пять", 0, 0.2), W("шесть", 0.2, 0.4), W("семь", 0.5, 0.7)], 1)).toBeNull();
+    expect(splitJoint(["[sad]", "Три."], [W("[sad]", 0, 0.2), W("Три.", 0.3, 0.5)], 1)).toBeNull();
+  });
+  it("groupLines: подряд, тот же голос и подача, не длиннее лимита", () => {
+    const L = (text: string, key = "a") => ({ text, key });
+    expect(groupLines([L("aaaa"), L("bbbb"), L("cc", "b"), L("dd", "b"), L("ee")], 100)).toEqual([[0, 1], [2, 3], [4]]);
+    expect(groupLines([L("a".repeat(6)), L("b".repeat(6)), L("c".repeat(6))], 13)).toEqual([[0, 1], [2]]);
   });
 });

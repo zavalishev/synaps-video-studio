@@ -10,6 +10,7 @@ export type VoiceConfig = {
   tag: string;            // входит в ключ кэша: другой провайдер/модель — другая озвучка
   timestamps: boolean;    // тайминги слов приходят вместе с аудио (ASR не нужен)
   style: boolean;         // понимает указания диктору (--style)
+  tags: boolean;          // понимает пометки исполнения в тексте ([warmly], [sighs]) — иначе они вырезаются
 };
 export const OPENAI_VOICES = ["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse", "marin", "cedar"];
 
@@ -25,26 +26,26 @@ const checkVoiceArgs = (voice: string, lang?: string) => {
 
 export const voiceConfig = (env: Env = process.env): VoiceConfig => {
   const p = (env.VOICE_PROVIDER ?? "").trim().toLowerCase() || "none";
-  const off = { model: "", voice: "", ready: false, timestamps: false, style: false };
+  const off = { model: "", voice: "", ready: false, timestamps: false, style: false, tags: false };
   if (p === "openai") {
     const model = pick(env, "OPENAI_TTS_MODEL", "gpt-4o-mini-tts");
     const ok = Boolean(env.OPENAI_API_KEY?.trim());
     return { provider: p, model, voice: pick(env, "OPENAI_TTS_VOICE", "onyx"), ready: ok, problem: ok ? undefined : "нет OPENAI_API_KEY",
-      tag: `openai:${model}`, timestamps: false, style: /gpt-4o/.test(model) };
+      tag: `openai:${model}`, timestamps: false, style: /gpt-4o/.test(model), tags: false };
   }
   if (p === "elevenlabs") {
-    const model = pick(env, "ELEVENLABS_MODEL", "eleven_multilingual_v2");
+    const model = pick(env, "ELEVENLABS_MODEL", "eleven_v3");
     const voice = env.ELEVENLABS_VOICE_ID?.trim() ?? "";
     const miss = [!env.ELEVENLABS_API_KEY?.trim() && "ELEVENLABS_API_KEY", !voice && "ELEVENLABS_VOICE_ID"].filter(Boolean);
     return { provider: p, model, voice, ready: miss.length === 0, problem: miss.length ? `нет ${miss.join(", ")}` : undefined,
-      tag: `elevenlabs:${model}`, timestamps: true, style: false };
+      tag: `elevenlabs:${model}`, timestamps: true, style: false, tags: /^eleven_v3/.test(model) };
   }
   if (p === "command") {
     const tpl = env.VOICE_COMMAND?.trim() ?? "";
     const bad = tpl ? templateProblem("VOICE_COMMAND", tpl, VOICE_PLACEHOLDERS) : "нет VOICE_COMMAND";
     return { provider: p, model: "command", voice: pick(env, "VOICE_COMMAND_VOICE", "default"), ready: !bad,
       problem: bad, tag: `command:${short(tpl)}`,
-      timestamps: /\{words_json\}/.test(tpl), style: /\{style(_file)?\}/.test(tpl) };
+      timestamps: /\{words_json\}/.test(tpl), style: /\{style(_file)?\}/.test(tpl), tags: env.VOICE_TAGS?.trim() === "1" };
   }
   if (p === "none") return { provider: "none", ...off, problem: "озвучка выключена (VOICE_PROVIDER=none)", tag: "none" };
   return { provider: p, ...off, problem: `неизвестный VOICE_PROVIDER=${p} (openai | elevenlabs | command | none)`, tag: p };

@@ -36,7 +36,7 @@ const nodeMajor = Number(node.split(".")[0]);
 
 const keys = Object.fromEntries(SECRET_VARS.map((k) => [k, Boolean(env[k]?.trim())]));
 const can: string[] = [], cannot: string[] = [];
-if (voice.ready) can.push(`голос: studio voice через ${voice.provider} (${voice.model}${voice.voice ? `, голос ${voice.voice}` : ""}) — платно, вашим ключом${voice.style ? "; --style работает" : "; --style не поддерживается — подачу задаёт текст"}`);
+if (voice.ready) can.push(`голос: studio voice через ${voice.provider} (${voice.model}${voice.voice ? `, голос ${voice.voice}` : ""}) — платно, вашим ключом${voice.style ? "; --style работает" : "; --style не поддерживается — подачу задаёт текст"}${voice.tags ? "; пометки исполнения работают: [warmly], [softly], [sad], [sighs], [laughs]… прямо в тексте реплики" : ""}${voice.timestamps ? "; реплики одного голоса — одним заходом, связной речью" : ""}`);
 else cannot.push(voice.provider === "none"
   ? "голоса нет (VOICE_PROVIDER=none): ролик без речи — музыка (studio music) + текст на экране, биты по долям музыки и событиям"
   : `голоса нет: ${voice.problem} — до настройки ролик без речи`);
@@ -64,7 +64,7 @@ if (nodeMajor < 22) missing.push(`Node ${node} — нужен 22+ (лучше 24
 
 const report = {
   envFile: existsSync(ENV_FILE) ? ENV_FILE : null, fromEnvFile: DOTENV_KEYS.length,
-  voice: { provider: voice.provider, model: voice.model, voice: voice.voice, ready: voice.ready, problem: voice.problem ?? null, timestamps: voice.timestamps, style: voice.style },
+  voice: { provider: voice.provider, model: voice.model, voice: voice.voice, ready: voice.ready, problem: voice.problem ?? null, timestamps: voice.timestamps, style: voice.style, tags: voice.tags },
   music: { provider: mus.provider, model: mus.model, ready: mus.ready, problem: mus.problem ?? null, plan: mus.plan },
   image: { provider: img.provider, model: img.model, ready: img.ready, problem: img.problem ?? null, transparency: img.transparency, refs: img.refs, bgRemover: img.bgRemover },
   timing: asr, keys,
@@ -80,7 +80,7 @@ L.push("studio doctor — что подключено");
 L.push(`.env: ${report.envFile ? `${report.envFile} (${DOTENV_KEYS.length} перем.)` : "нет — скопируйте .env.example в .env и впишите своих провайдеров"}`);
 L.push("");
 L.push("Провайдеры (.env)");
-L.push(`  озвучка   VOICE_PROVIDER=${voice.provider}  ${voice.ready ? `готово: ${voice.model}, голос ${voice.voice}${voice.timestamps ? ", тайминги слов в ответе" : ""}` : voice.problem}`);
+L.push(`  озвучка   VOICE_PROVIDER=${voice.provider}  ${voice.ready ? `готово: ${voice.model}, голос ${voice.voice}${voice.timestamps ? ", тайминги слов в ответе" : ""}${voice.tags ? ", пометки исполнения" : ""}` : voice.problem}`);
 L.push(`  картинки  IMAGE_PROVIDER=${img.provider}  ${img.ready ? `готово: ${img.model}; прозрачность ${img.transparency ? "да" : img.bgRemover ? "через IMAGE_BG_COMMAND" : "нет"}, референсы ${img.refs ? "да" : "нет"}` : img.problem}`);
 L.push(`  музыка    MUSIC_PROVIDER=${mus.provider}  ${mus.ready ? `готово: ${mus.model}${mus.plan ? ", план по секциям" : ""}` : mus.problem}`);
 L.push(`  тайминги  ASR_PROVIDER=${env.ASR_PROVIDER || "auto"}  ${asr.map((s) => timingName[s]).join(" → ")}`);
