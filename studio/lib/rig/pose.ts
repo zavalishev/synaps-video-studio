@@ -47,7 +47,10 @@ export type RigAction =
   | { do: "walk" | "run" | "move"; at: number; to: Vec; dur?: number; face?: boolean }
   | { do: "hop"; at: number; h?: number }
   | { do: "wave" | "point"; at: number; dur?: number; arm?: Side; angle?: number }
-  | { do: "cheer" | "talk" | "sleep" | "nod" | "shiver" | "surprise"; at: number; dur?: number }
+  | { do: "cheer" | "sleep" | "nod" | "shiver" | "surprise"; at: number; dur?: number }
+  /** beats — слова реплики: [начало, конец (с от at), слогов]. Есть — рот открывается на слогах и закрыт
+   *  в паузах; нет — рот хлопает сам по себе. */
+  | { do: "talk"; at: number; dur?: number; beats?: [number, number, number][] }
   | { do: "look"; at: number; dur?: number; angle: number }
   | { do: "turn"; at: number; facing: 1 | -1 }
   | { do: "pose"; at: number; dur?: number; ease?: number; angles?: Record<string, number>; lean?: number; dy?: number; alt?: Record<string, string> };
@@ -334,7 +337,8 @@ export const evaluate = (rig: RigDef, acts: RigAction[], t: number, o: { x: numb
       }
       case "talk": {
         const w = env(t, a.at, end, 0.05);
-        if (w > 0.5 && hash(Math.floor(lt * 9) + 17) > 0.4) alt(face, "talk");
+        if (a.beats?.length) { if (mouthOpen(a.beats, lt)) alt(face, "talk"); }
+        else if (w > 0.5 && hash(Math.floor(lt * 9) + 17) > 0.4) alt(face, "talk");
         add("head", w * 2.5 * Math.sin(TAU * 2.2 * lt));
         break;
       }
@@ -434,8 +438,29 @@ export const rootMatrix = (rig: RigDef, rest: ReturnType<typeof restBounds>, x: 
   return chain(T(x + pose.dx, y + pose.dy), R(pose.rot), S(pose.facing * pose.sx * k, pose.sy * k), T(-(rest.x + rest.w / 2), -(rest.y + rest.h)));
 };
 
-/** Реплики героя из words.json → действия talk (рот открывается на словах). */
-export const talkFromWords = (words: { lines?: { start: number; end: number; id?: string }[] }, opt: { from?: number; to?: number; ids?: string[]; offset?: number } = {}): RigAction[] =>
+/** Слогов в слове — по гласным (русские и латиница); цифры и сокращения — хотя бы один. */
+export const syllables = (word: string) => Math.max(1, (word.toLowerCase().match(/[аеёиоуыэюяaeiouy]/g) ?? []).length);
+
+/** Открыт ли рот в момент lt (с от начала реплики): каждый слог слова — «открыл и прикрыл»,
+ *  в паузах между словами рот закрыт. Слог короче ~3 кадров глаз не различит — такие сливаются. */
+export const mouthOpen = (beats: [number, number, number][], lt: number) => {
+  for (const [s, e, n] of beats) {
+    if (lt < s || lt >= e) continue;
+    const k = Math.max(1, Math.min(n, Math.floor((e - s) / 0.1)));
+    const u = (((lt - s) / (e - s)) * k) % 1;
+    return u < 0.65;
+  }
+  return false;
+};
+
+type WordsJson = { lines?: { start: number; end: number; id?: string; words?: { text: string; start: number; end: number }[] }[] };
+
+/** Реплики героя из words.json → действия talk: рот открывается на слогах слов и закрыт в паузах. */
+export const talkFromWords = (words: WordsJson, opt: { from?: number; to?: number; ids?: string[]; offset?: number } = {}): RigAction[] =>
   (words.lines ?? [])
     .filter((l) => (!opt.ids || (l.id && opt.ids.includes(l.id))) && l.end > (opt.from ?? -Infinity) && l.start < (opt.to ?? Infinity))
-    .map((l) => ({ do: "talk" as const, at: l.start - (opt.offset ?? 0), dur: l.end - l.start }));
+    .map((l) => {
+      const beats = (l.words ?? []).filter((w) => w.end > w.start)
+        .map((w): [number, number, number] => [w.start - l.start, w.end - l.start, syllables(w.text)]);
+      return { do: "talk" as const, at: l.start - (opt.offset ?? 0), dur: l.end - l.start, ...(beats.length ? { beats } : {}) };
+    });

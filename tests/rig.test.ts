@@ -179,6 +179,29 @@ describe("скелет", () => {
     expect(talkFromWords(w, { ids: ["b"], offset: 1 })).toEqual([{ do: "talk", at: 2, dur: 1.5 }]);
   });
 
+  it("рот по словам озвучки: открыт на слогах, закрыт в паузе между словами", () => {
+    const words = { lines: [{ id: "a", start: 2, end: 4, words: [
+      { text: "Привет", start: 2.0, end: 2.5 },   // 2 слога
+      { text: "друзья", start: 3.2, end: 3.8 },   // пауза 0,7 с перед словом
+    ] }] };
+    const acts = talkFromWords(words);
+    expect(acts[0]).toMatchObject({ do: "talk", at: 2, dur: 2 });
+    const beats = (acts[0] as { beats: number[][] }).beats;
+    [[0, 0.5, 2], [1.2, 1.8, 2]].forEach((b, i) => b.forEach((v, j) => expect(beats[i][j]).toBeCloseTo(v, 6)));
+    const head = { ...rig.parts.head, alt: { talk: "t.png" } };
+    const r: RigDef = { ...rig, parts: { ...rig.parts, head } };
+    const open = (t: number) => evaluate(r, acts, t, { x: 0, y: 0, height: 100 }).pose.alt.head === "talk";
+    // Пауза 2,5–3,2: рот закрыт все кадры.
+    for (let t = 2.55; t < 3.18; t += 1 / 30) expect(open(t), `пауза ${t.toFixed(2)}`).toBe(false);
+    // Двухсложное слово: открыл — прикрыл — снова открыл.
+    const seq = Array.from({ length: 15 }, (_, i) => open(2 + i / 30));
+    expect(seq[0]).toBe(true);
+    expect(seq.filter((v, i) => i > 0 && v && !seq[i - 1]).length).toBe(1);
+    // Без слов — старое поведение (рот хлопает по реплике).
+    const plain = talkFromWords({ lines: [{ id: "x", start: 0, end: 2 }] });
+    expect(Array.from({ length: 60 }, (_, i) => evaluate(r, plain, i / 30, { x: 0, y: 0, height: 100 }).pose.alt.head)).toContain("talk");
+  });
+
   it("предмет-персонаж: резиновые конечности и лицо на теле", () => {
     const obj: RigDef = { parts: { torso: { src: "b.png", w: 100, h: 140, pivot: [50, 126], alt: { blink: "bb.png" } }, armL: { parent: "torso", at: [10, 70], hose: { len: 40, width: 6, color: "#000", endR: 7 } } } };
     expect(validateRig(obj)).toEqual([]);
