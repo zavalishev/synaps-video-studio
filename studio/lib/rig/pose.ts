@@ -129,25 +129,29 @@ export const travel = (u: number, r: number) => {
 
 /** Где корень (точка на земле под героем) и куда он смотрит в момент t. */
 export const placeAt = (acts: RigAction[], t: number, o: { x: number; y: number; facing?: 1 | -1; height: number }) => {
-  let x = o.x, y = o.y, facing: 1 | -1 = o.facing ?? 1, moving: Moving | null = null;
+  let x = o.x, y = o.y, facing: 1 | -1 = o.facing ?? 1, moving: Moving | null = null, turnedAt = -Infinity;
+  const face = (f: 1 | -1, at: number) => { if (f !== facing) { facing = f; turnedAt = at; } };
   for (const a of [...acts].sort((p, q) => p.at - q.at)) {
     if (t < a.at) break;
-    if (a.do === "turn") { facing = a.facing; continue; }
+    if (a.do === "turn") { face(a.facing, a.at); continue; }
     if (a.do !== "walk" && a.do !== "run" && a.do !== "move") continue;
     const [tx, ty] = a.to;
     const len = Math.hypot(tx - x, ty - y);
     const speed = (a.do === "run" ? 1.4 : a.do === "move" ? 0.8 : 0.6) * o.height;
     const dur = a.dur ?? Math.max(0.5, len / speed);
     const dir = Math.sign(tx - x) || facing;
-    if (a.face !== false && tx !== x) facing = dir > 0 ? 1 : -1;
+    if (a.face !== false && tx !== x) face(dir > 0 ? 1 : -1, a.at);
     const u = clamp((t - a.at) / dur, 0, 1);
     // Разгон/торможение ~0,25 с (не больше трети пути с каждой стороны).
     const e = travel(u, Math.min(0.3, 0.25 / dur));
     if (u < 1) { moving = { at: a.at, end: a.at + dur, kind: a.do, dir, dist: len * e, len }; x += (tx - x) * e; y += (ty - y) * e; break; }
     x = tx; y = ty;
   }
-  return { x, y, facing, moving };
+  return { x, y, facing, moving, turnedAt };
 };
+
+/** Разворот длится столько секунд: фигура сжимается по ширине и раскрывается в другую сторону. */
+export const TURN_SEC = 0.18;
 
 // ── шаг: опорная нога стоит на земле, маховая переносится вперёд ────────────────────────────
 const restCache = new WeakMap<RigDef, { h: number }>();
@@ -266,6 +270,9 @@ export const evaluate = (rig: RigDef, acts: RigAction[], t: number, o: { x: numb
   const alt = (n: string, k: string) => { if (rig.parts[n]?.alt?.[k]) p.alt[n] = k; };
   const H = o.height;
   const face = has("head") ? "head" : rootOf(rig);
+
+  // Разворот: не мгновенное зеркало, а мультяшный «переворот» по ширине (−1 → 0 → 1 за TURN_SEC).
+  if (t >= at.turnedAt && t < at.turnedAt + TURN_SEC) p.sx *= -Math.cos(Math.PI * sm((t - at.turnedAt) / TURN_SEC));
 
   // Покой: дыхание, голова, руки чуть отведены.
   const br = Math.sin((TAU * t) / 2.4);

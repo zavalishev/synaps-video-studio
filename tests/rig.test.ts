@@ -92,6 +92,14 @@ describe("скелет", () => {
     }
   });
 
+  it("разворот — переворот по ширине за доли секунды, а не мгновенное зеркало", () => {
+    const acts = [{ do: "walk" as const, at: 0, to: [900, 0] as [number, number], dur: 1 }, { do: "walk" as const, at: 2, to: [100, 0] as [number, number], dur: 1 }];
+    const vis = (t: number) => { const s = evaluate(rig, acts, t, { x: 500, y: 0, height: 100 }); return s.pose.facing * s.pose.sx; };
+    expect(vis(1.9)).toBeGreaterThan(0.9);
+    expect(Math.abs(vis(2 + 0.09))).toBeLessThan(0.2); // середина разворота — «ребро»
+    expect(vis(2.3)).toBeLessThan(-0.9);
+  });
+
   it("взмах поднимает руку наружу и вверх, моргание и речь меняют голову", () => {
     const up = evaluate(rig, [{ do: "wave", at: 0, arm: "R" }], 0.8, { x: 0, y: 0, height: 100 }).pose;
     expect(up.ang.armR).toBeLessThan(-120); // правая рука: наружу — против часовой
