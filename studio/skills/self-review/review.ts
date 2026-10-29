@@ -369,7 +369,9 @@ const analyzeGuard = (guard: GuardHit[], fps: number, briefNums: Set<number>) =>
     } else if (g.kind === "text-clipped") {
       // Срезанные буквы, которые держатся (не кадр-другой анимации появления), — брак, который зритель
       // видит сразу: FAIL, а не WARN (на проде такие ролики уходили в чат с обрезанной цитатой).
-      issues.push({ level: longest >= 6 ? "FAIL" : "INFO", source: "guard", kind: g.kind, id: g.id, frames: span, msg: `«${g.id}»: буквы срезаны родителем (overflow) на ${g.worst}px, ${longest} кадров подряд — подпись шире своей плашки/блока ${det}` });
+      const vert = /top|bottom/.test(String((g.detail as { side?: string } | null)?.side ?? ""));
+      const why = vert ? "строки не влезли по высоте блока: выше блок, меньше текста или кегль (FitText)" : "подпись шире своей плашки/блока";
+      issues.push({ level: longest >= 6 ? "FAIL" : "INFO", source: "guard", kind: g.kind, id: g.id, frames: span, msg: `«${g.id}»: буквы срезаны родителем (overflow) на ${g.worst}px, ${longest} кадров подряд — ${why} ${det}` });
     } else if (g.kind === "audit-misplaced") {
       issues.push({ level: "WARN", source: "guard", kind: g.kind, frames: span, msg: "FrameAudit не во весь кадр — положите его прямым ребёнком <Stage>" });
     } else {

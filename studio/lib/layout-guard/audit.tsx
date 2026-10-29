@@ -261,13 +261,19 @@ export const FrameAudit: React.FC<Opts> = ({ safe, minTextFrac = 0.03, tolerance
           const ov = inter(vis, col);
           if (ov && ov.w * ov.h > 0.2 * vis.w * vis.h && ov.w > 0.25 * (fs ?? 40)) reportGuard({ id: key, kind: "text-under-ui", frame, amount: r1(ov.w), detail: { box: { x: Math.round(vis.x), y: Math.round(vis.y), w: Math.round(vis.w), h: Math.round(vis.h) }, role: el.closest("[data-role]")?.getAttribute("data-role") ?? null } });
         }
-        // Буквы срезаны по горизонтали родителем с overflow ≠ visible (подпись шире своей
-        // плашки: «10 000 ₽» без «₽»). Игра (прокрутка цифр) и шторки — не брак.
+        // Буквы срезаны родителем с overflow ≠ visible: по горизонтали — подпись шире своей
+        // плашки («10 000 ₽» без «₽»); по вертикали — строки не влезли в плитку фиксированной
+        // высоты (пропала нижняя строка «…и ведение»). Игра (прокрутка цифр) и шторки — не брак.
         if (fs && !el.closest("[data-acting]") && !clipped) {
           const cutL = vis.x - raw.x, cutR = raw.x + raw.w - (vis.x + vis.w);
+          const cutT = vis.y - raw.y, cutB = raw.y + raw.h - (vis.y + vis.h);
           const atFrame = (cutL > 0 && vis.x <= 1) || (cutR > 0 && vis.x + vis.w >= st.W - 1); // край кадра — это text-cut
+          const atFrameV = (cutT > 0 && vis.y <= 1) || (cutB > 0 && vis.y + vis.h >= st.H - 1);
           const cut = Math.max(cutL, cutR);
+          // По вертикали у коробки текста есть поля шрифта (выше и ниже глифов) — прощаем 0,4 кегля.
+          const cutV = Math.max(cutT, cutB);
           if (cut > 0.15 * fs && vis.w > 0 && !atFrame) reportGuard({ id: key, kind: "text-clipped", frame, amount: r1(cut), detail: { px: r1(cut), side: vis.x - raw.x > 0.15 * fs ? "left" : "right" } });
+          else if (cutV > 0.4 * fs && vis.h > 0 && !atFrameV) reportGuard({ id: key, kind: "text-clipped", frame, amount: r1(cutV), detail: { px: r1(cutV), side: cutB >= cutT ? "bottom" : "top" } });
         }
         // amount — нехватка до минимума (px): худшее = самое мелкое; frac — кегль в долях высоты.
         if (fs !== undefined && fs < minTextFrac * st.H && !el.closest("[data-decor]")) reportGuard({ id: key, kind: "text-tiny", frame, amount: r1(minTextFrac * st.H - fs), detail: { px: r1(fs), min: Math.round(minTextFrac * st.H), frac: +(fs / st.H).toFixed(4) } });
@@ -280,7 +286,10 @@ export const FrameAudit: React.FC<Opts> = ({ safe, minTextFrac = 0.03, tolerance
           if (pb.w >= st.W * 0.98 && pb.h >= st.H * 0.98) break;
           const outL = pb.x - raw.x, outR = raw.x + raw.w - (pb.x + pb.w);
           const over = Math.max(outL, outR);
+          // Строки ниже/выше плашки (плитка без overflow: текст свисает с неё) — поля шрифта прощаем.
+          const outT = pb.y - raw.y, outB = raw.y + raw.h - (pb.y + pb.h), overV = Math.max(outT, outB) - 0.3 * fs;
           if (over > 1.5) reportGuard({ id: key, kind: "text-overflow", frame, amount: r1(over), detail: { side: outR > outL ? "right" : "left", px: r1(over), plate: label(p) } });
+          else if (overV > 1.5) reportGuard({ id: key, kind: "text-overflow", frame, amount: r1(overV), detail: { side: outB >= outT ? "bottom" : "top", px: r1(overV), plate: label(p) } });
           else if (-over < 0.08 * fs && pb.w > raw.w + 2) reportGuard({ id: key, kind: "text-tight", frame, amount: r1(0.08 * fs + over), detail: { side: outR > outL ? "right" : "left", padPx: r1(-over) } });
           break;
         }
