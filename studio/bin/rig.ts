@@ -139,9 +139,11 @@ const cut = async () => {
     const legAx = a.side ? [["legL", 0.46], ["legR", 0.54]] as const : [["legL", 0.32], ["legR", 0.68]] as const;
     for (const [r, ax] of legAx) {
       const p = sz(r); if (!p) continue;
-      parts[r] = { src: rel(r), ...p, parent: "torso", at: [Math.round(t.w * ax), Math.round(t.h * 0.86)], pivot: [Math.round(p.w / 2), Math.round(Math.min(p.w * 0.45, p.h * 0.18))], z: a.side && r === "legL" ? 1 : -2 };
+      // Ноги — за туловищем (его низ прикрывает круглый «сустав» бедра); ближняя (L) перед дальней.
+      parts[r] = { src: rel(r), ...p, parent: "torso", at: [Math.round(t.w * ax), Math.round(t.h * 0.86)], pivot: [Math.round(p.w / 2), Math.round(Math.min(p.w * 0.45, p.h * 0.18))], z: a.side && r === "legL" ? -1 : -2 };
+      // Голень — за своим бедром: низ бедра прикрывает её колено.
       const shin = r === "legL" ? "shinL" : "shinR", s = sz(shin);
-      if (s) parts[shin] = { src: rel(shin), ...s, parent: r, at: [Math.round(p.w / 2), Math.round(p.h * 0.88)], pivot: [Math.round(s.w / 2), Math.round(Math.min(s.w * 0.4, s.h * 0.12))], z: parts[r].z };
+      if (s) parts[shin] = { src: rel(shin), ...s, parent: r, at: [Math.round(p.w / 2), Math.round(p.h * 0.88)], pivot: [Math.round(s.w / 2), Math.round(Math.min(s.w * 0.4, s.h * 0.12))], z: (parts[r].z ?? 0) - 0.1 };
     }
   }
   if (a.object && sz("torso")) {
