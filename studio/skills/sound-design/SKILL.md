@@ -72,6 +72,18 @@ description: Звук ролика — голос (если озвучка по�
                {"name":"outro","styles":["resolve, sustained chord, no fade to silence"],"sec":4}]}
   ```
   Коротко — `--make "warm felt piano, soft strings, hopeful, 92 BPM, build to uplifting finish" --sec 30`.
+  **Звук не должен быть стоком.** Расплывчатое «upbeat electronic / corporate / lo-fi» генератор
+  закрывает самым частым вариантом. Называй точно: конкретный поджанр + BPM + тональность +
+  3–5 фирменных инструментов поджанра + продакшн/эпоха + 2–3 слова настроения; первая секция — уже
+  грув (крючок звучит с 0:00, без интро и fade-in); секции в целых тактах (такт = 240/BPM с), подъём —
+  на главной мысли; `avoid` всегда: `generic corporate, stock music, cheesy ukulele, whistling,
+  orchestral, fade-in, long intro`. Без имён артистов и названий треков (генератор отклоняет); эпоху
+  можно («1979 disco», «late-2000s UK funky house»). Звуки на подъёме (2025–2026, Splice/TikTok):
+  afro house 120–124 (бьюти, мода, лайфстайл), UK garage 2-step 130–132 и speed garage 130–136
+  (товар, «до/после»), amapiano 110–115 и nu-disco 118 (еда, кафе), бразильский фонк 125–135 (авто,
+  игры, спорт), melodic organic house 116–120 (интерьер, спа), pluggnB 150 half-time (личный бренд).
+  Под голос диктора — без ведущей мелодии («sparse, no lead melody, leave the mids clear»):
+  organic pulse ~100 или lo-fi house ~120. Минор — «дорого, вечер», мажор — «утро, еда, семья».
   Один трек на ролик: модель его не слышит, поэтому проверка — mixcheck и решение по цифрам,
   а не перебор генераций. Описание трека и почему он такой — в notes.md. Генерация отказала
   (бюджет, сеть) — каталог, ролик выпускается всё равно.
