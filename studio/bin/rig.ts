@@ -18,7 +18,7 @@ import sharp from "sharp";
 import { apply, drawList, evaluate, restBounds, rootMatrix, validateRig, type RigAction, type RigDef, type RigPart, type Vec } from "../lib/rig/pose";
 import { die, ensureDir, inJob, jobDir, num, parseArgs, str } from "./_lib";
 
-const a = parseArgs(process.argv.slice(2), ["joints", "object"]);
+const a = parseArgs(process.argv.slice(2), ["joints", "object", "side"]);
 const dir = jobDir(a);
 const sub = a._[0];
 
@@ -83,8 +83,12 @@ const cut = async () => {
     const armR = arms.filter((c) => c.cx > torso.x1 - 4).sort((p, q) => q.n - p.n)[0];
     if (armL) roles.set(armL.id, "armL");
     if (armR) roles.set(armR.id, "armR");
-    const legs = big.filter((c) => !roles.has(c.id) && c.cy > torso.cy).sort((p, q) => q.n - p.n).slice(0, 2).sort((p, q) => p.cx - q.cx);
-    if (legs.length === 2) { roles.set(legs[0].id, "legL"); roles.set(legs[1].id, "legR"); }
+    // Профиль с коленями (--side): внизу четыре части слева направо — бедро и голень левой ноги,
+    // бедро и голень правой. Иначе — две цельные ноги.
+    const below = big.filter((c) => !roles.has(c.id) && c.cy > torso.cy).sort((p, q) => q.n - p.n);
+    const legs = below.slice(0, a.side && below.length >= 4 ? 4 : 2).sort((p, q) => p.cx - q.cx);
+    if (legs.length === 4) ["legL", "shinL", "legR", "shinR"].forEach((r, i) => roles.set(legs[i].id, r));
+    else if (legs.length === 2) { roles.set(legs[0].id, "legL"); roles.set(legs[1].id, "legR"); }
   }
   let ex = 0;
   for (const c of big) if (!roles.has(c.id)) roles.set(c.id, `extra${++ex}`);
@@ -126,13 +130,18 @@ const cut = async () => {
       if (sz("head-talk")) alt.talk = rel("head-talk");
       if (Object.keys(alt).length) parts.head.alt = alt;
     }
-    for (const [r, ax] of [["armL", 0.14], ["armR", 0.86]] as const) {
+    const armAx = a.side ? [["armL", 0.48], ["armR", 0.52]] as const : [["armL", 0.14], ["armR", 0.86]] as const;
+    for (const [r, ax] of armAx) {
       const p = sz(r); if (!p) continue;
-      parts[r] = { src: rel(r), ...p, parent: "torso", at: [Math.round(t.w * ax), Math.round(t.h * 0.17)], pivot: [Math.round(p.w / 2), Math.round(Math.min(p.w * 0.45, p.h * 0.2))], z: -1 };
+      parts[r] = { src: rel(r), ...p, parent: "torso", at: [Math.round(t.w * ax), Math.round(t.h * 0.17)], pivot: [Math.round(p.w / 2), Math.round(Math.min(p.w * 0.45, p.h * 0.2))], z: a.side && r === "armL" ? 3 : -1 };
     }
-    for (const [r, ax] of [["legL", 0.32], ["legR", 0.68]] as const) {
+    // В профиль обе ноги крепятся почти в одну точку бедра; дальняя (R) — за туловищем, ближняя — перед.
+    const legAx = a.side ? [["legL", 0.46], ["legR", 0.54]] as const : [["legL", 0.32], ["legR", 0.68]] as const;
+    for (const [r, ax] of legAx) {
       const p = sz(r); if (!p) continue;
-      parts[r] = { src: rel(r), ...p, parent: "torso", at: [Math.round(t.w * ax), Math.round(t.h * 0.86)], pivot: [Math.round(p.w / 2), Math.round(Math.min(p.w * 0.45, p.h * 0.18))], z: -2 };
+      parts[r] = { src: rel(r), ...p, parent: "torso", at: [Math.round(t.w * ax), Math.round(t.h * 0.86)], pivot: [Math.round(p.w / 2), Math.round(Math.min(p.w * 0.45, p.h * 0.18))], z: a.side && r === "legL" ? 1 : -2 };
+      const shin = r === "legL" ? "shinL" : "shinR", s = sz(shin);
+      if (s) parts[shin] = { src: rel(shin), ...s, parent: r, at: [Math.round(p.w / 2), Math.round(p.h * 0.88)], pivot: [Math.round(s.w / 2), Math.round(Math.min(s.w * 0.4, s.h * 0.12))], z: parts[r].z };
     }
   }
   if (a.object && sz("torso")) {
@@ -149,7 +158,7 @@ const cut = async () => {
     parts.legR = { parent: "torso", at: [Math.round(t.w * 0.64), Math.round(t.h * 0.9)], z: -2, hose: { len: leg, width: wd, color: col, endR: Math.round(wd * 1.3) } };
   }
   const extras = Object.keys(sizes).filter((r) => r.startsWith("extra"));
-  const rig = { name, view: "front", sheet: srcArg, parts, ...(extras.length ? { unused: Object.fromEntries(extras.map((r) => [r, { src: rel(r), ...sizes[r] }])) } : {}) };
+  const rig = { name, view: a.side ? "side" : "front", sheet: srcArg, parts, ...(extras.length ? { unused: Object.fromEntries(extras.map((r) => [r, { src: rel(r), ...sizes[r] }])) } : {}) };
   const rigFile = join(outDir, "rig.json");
   // Части — по строке на часть: черновик правится руками, и так его удобно читать.
   const json = JSON.stringify(rig, null, 1).replace(/\[\s+(-?[\d.]+),\s+(-?[\d.]+)\s+\]/g, "[$1, $2]");

@@ -55,6 +55,8 @@ export type RigAction =
 export type Pose = {
   dx: number; dy: number; rot: number; sx: number; sy: number; facing: 1 | -1;
   ang: Record<string, number>; len: Record<string, number>; scale: Record<string, number>; alt: Record<string, string>;
+  /** Сдвиг части от точки крепления, пиксели картинки родителя (нога поднимается при шаге, а не сплющивается). */
+  off: Record<string, Vec>;
 };
 
 export type DrawItem =
@@ -112,7 +114,18 @@ const LIMB = /^(arm|leg)[LR]$/;
 const DUR: Record<string, number> = { hop: 0.95, wave: 1.6, point: 1.5, cheer: 1.4, talk: 1.5, sleep: 2, nod: 0.8, shiver: 1.2, surprise: 0.8, look: 1.2, pose: 1.2 };
 export const actionEnd = (a: RigAction): number => (a.do === "turn" ? a.at : a.at + ("dur" in a && a.dur ? a.dur : DUR[a.do] ?? 1));
 
-type Moving = { at: number; end: number; kind: "walk" | "run" | "move"; dir: number };
+/** dist — сколько пройдено от начала перехода (пиксели кадра): по нему, а не по часам, считается шаг. */
+type Moving = { at: number; end: number; kind: "walk" | "run" | "move"; dir: number; dist: number; len: number };
+
+/** Доля пути к моменту u (0..1) при скорости-трапеции: разгон и торможение по `r` с каждой стороны,
+ *  посередине — ровный ход. Ровная скорость нужна, чтобы шаг совпадал с перемещением (ноги не скользят). */
+export const travel = (u: number, r: number) => {
+  const x = clamp(u, 0, 1), k = 2 * r * (1 - r);
+  if (r <= 0) return x;
+  if (x < r) return (x * x) / k;
+  if (x > 1 - r) return 1 - ((1 - x) * (1 - x)) / k;
+  return (x - r / 2) / (1 - r);
+};
 
 /** Где корень (точка на земле под героем) и куда он смотрит в момент t. */
 export const placeAt = (acts: RigAction[], t: number, o: { x: number; y: number; facing?: 1 | -1; height: number }) => {
@@ -122,22 +135,131 @@ export const placeAt = (acts: RigAction[], t: number, o: { x: number; y: number;
     if (a.do === "turn") { facing = a.facing; continue; }
     if (a.do !== "walk" && a.do !== "run" && a.do !== "move") continue;
     const [tx, ty] = a.to;
+    const len = Math.hypot(tx - x, ty - y);
     const speed = (a.do === "run" ? 1.4 : a.do === "move" ? 0.8 : 0.6) * o.height;
-    const dur = a.dur ?? Math.max(0.5, Math.hypot(tx - x, ty - y) / speed);
+    const dur = a.dur ?? Math.max(0.5, len / speed);
     const dir = Math.sign(tx - x) || facing;
     if (a.face !== false && tx !== x) facing = dir > 0 ? 1 : -1;
     const u = clamp((t - a.at) / dur, 0, 1);
-    const e = 0.5 * u + 0.5 * sm(u);
-    if (u < 1) { moving = { at: a.at, end: a.at + dur, kind: a.do, dir }; x += (tx - x) * e; y += (ty - y) * e; break; }
+    // Разгон/торможение ~0,25 с (не больше трети пути с каждой стороны).
+    const e = travel(u, Math.min(0.3, 0.25 / dur));
+    if (u < 1) { moving = { at: a.at, end: a.at + dur, kind: a.do, dir, dist: len * e, len }; x += (tx - x) * e; y += (ty - y) * e; break; }
     x = tx; y = ty;
   }
   return { x, y, facing, moving };
 };
 
+// ── шаг: опорная нога стоит на земле, маховая переносится вперёд ────────────────────────────
+const restCache = new WeakMap<RigDef, { h: number }>();
+const restHeight = (rig: RigDef) => {
+  let r = restCache.get(rig);
+  if (!r) { r = { h: Math.max(1, restBounds(rig).h) }; restCache.set(rig, r); }
+  return r.h;
+};
+
+/** Длина звена от сустава до низа (пиксели своей картинки). */
+const segLen = (p?: RigPart) => (!p ? 0 : p.hose ? p.hose.len : Math.max(1, (p.h ?? 0) - (p.pivot?.[1] ?? 0)) * 0.94);
+
+/** Двухзвенная нога: стопа в точке (fx вперёд, fy вниз) от бедра. Углы — «вперёд положительно», градусы:
+ *  бедро от вертикали, голень относительно бедра (колено вперёд, голень назад). */
+export const legIK = (fx: number, fy: number, l1: number, l2: number) => {
+  const d = clamp(Math.hypot(fx, fy), 1e-3, (l1 + l2) * 0.999);
+  const aim = Math.atan2(fx, fy);
+  const knee = Math.acos(clamp((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d), -1, 1));
+  const inner = Math.acos(clamp((l1 * l1 + l2 * l2 - d * d) / (2 * l1 * l2), -1, 1));
+  const deg = 180 / Math.PI;
+  return { thigh: (aim + knee) * deg, shin: -(Math.PI - inner) * deg };
+};
+
+type Gait = { stride: number; lift: number; bob: number; arms: number };
+const GAIT: Record<"front" | "side", Record<"walk" | "run", Gait>> = {
+  // stride — длина одного шага в долях роста; lift — подъём стопы в долях длины ноги.
+  side: { walk: { stride: 0.42, lift: 0.1, bob: 1, arms: 0.75 }, run: { stride: 0.62, lift: 0.2, bob: 1, arms: 1.1 } },
+  // Анфас при ходьбе вбок — приставной шаг: шаг короче, нога поднимается выше, корпус переваливается.
+  // stride здесь — половина цикла (ведущая шагает на 2·stride и вторая подтягивается).
+  front: { walk: { stride: 0.12, lift: 0.16, bob: 1, arms: 0.25 }, run: { stride: 0.17, lift: 0.24, bob: 1, arms: 0.4 } },
+};
+
+/** Ноги и руки при ходьбе/беге от пройденного пути: стопа опорной ноги неподвижна относительно земли. */
+const gait = (rig: RigDef, p: Pose, mv: Moving, w: number, H: number, localDir: number) => {
+  const view = rig.view === "side" ? "side" : "front", run = mv.kind === "run";
+  const g = GAIT[view][run ? "run" : "walk"];
+  const restH = restHeight(rig), k = H / restH; // пиксели скелета → пиксели кадра
+  const stride = g.stride * restH, dist = mv.dist / k;
+  const cssDeg = (forward: number) => -forward * localDir; // «вперёд» → угол CSS (по часовой)
+  // Анфас: ведущая нога — та, что со стороны движения (по точке крепления к туловищу).
+  const lx = rig.parts.legL?.at?.[0] ?? 0, rx = rig.parts.legR?.at?.[0] ?? 0;
+  const lead = (rx - lx) * localDir >= 0 ? "legR" : "legL";
+  let drop = 0;
+  const legFwd: Record<string, number> = {};
+  for (const [leg, ph0] of [["legL", 0], ["legR", 0.5]] as const) {
+    const thigh = rig.parts[leg];
+    if (!thigh) continue;
+    const shinName = leg === "legL" ? "shinL" : "shinR", shin = rig.parts[shinName];
+    const l1 = segLen(thigh), l2 = shin ? segLen(shin) : 0, L = l1 + l2;
+    let fx: number, up = 0, planted: boolean;
+    if (view === "side") {
+      const c = (((dist / (2 * stride) + ph0) % 1) + 1) % 1;
+      planted = c < 0.5;
+      if (planted) fx = stride / 2 - (c / 0.5) * stride; // опора: стопа на месте, тело уходит вперёд
+      else {
+        // Перенос: кривая Эрмита со скоростью −1 по краям — в момент отрыва и постановки стопа
+        // неподвижна относительно земли (иначе нога «приземляется на ходу» и скользит).
+        const u = (c - 0.5) / 0.5;
+        fx = -stride / 2 + stride * (-4 * u * u * u + 6 * u * u - u);
+        up = g.lift * L * Math.sin(Math.PI * u) ** 1.5;
+      }
+    } else {
+      // Приставной шаг: за цикл (путь 2·stride) ведущая нога шагает в сторону, затем вторая
+      // подтягивается к ней. Стопы не скрещиваются; опорная стоит, пока переносится другая.
+      const D = 2 * stride, c = (((dist / D) % 1) + 1) % 1, body = c * D;
+      const isLead = leg === lead;
+      const moving = isLead ? c < 0.5 : c >= 0.5, u = isLead ? c / 0.5 : (c - 0.5) / 0.5;
+      planted = !moving;
+      const foot = isLead ? (moving ? D * sm(u) : D) : (moving ? D * sm(u) : 0);
+      fx = foot - body;
+      if (moving) up = g.lift * L * Math.sin(Math.PI * u);
+    }
+    fx *= w; up *= w;
+    const reach = Math.min(Math.abs(fx), 0.85 * L);
+    const hip = Math.sqrt(Math.max(0, (0.985 * L) ** 2 - reach * reach)); // высота бедра над опорной стопой
+    if (planted) drop = Math.max(drop, L - hip);
+    if (shin) {
+      const ik = legIK(fx, hip - up, l1, l2);
+      p.ang[leg] = (p.ang[leg] ?? 0) + cssDeg(ik.thigh);
+      p.ang[shinName] = (p.ang[shinName] ?? 0) + cssDeg(ik.shin);
+      legFwd[leg] = ik.thigh;
+    } else {
+      const a = (Math.asin(clamp(fx / L, -0.85, 0.85)) * 180) / Math.PI;
+      p.ang[leg] = (p.ang[leg] ?? 0) + cssDeg(a);
+      if (up > 0) p.off[leg] = [0, -up]; // нога поднимается целиком, без сплющивания картинки
+      legFwd[leg] = a;
+    }
+  }
+  // Бёдра идут по опорной ноге: ниже в момент постановки стопы, выше над ней.
+  p.dy += drop * k * g.bob - (run ? 0.03 * H * w * Math.abs(Math.sin((Math.PI * dist) / stride)) : 0);
+  // Руки — в противофазе ногам (правая рука с левой ногой).
+  if (view === "side") {
+    if (rig.parts.armL) p.ang.armL = (p.ang.armL ?? 0) + cssDeg(-(legFwd.legL ?? 0) * g.arms);
+    if (rig.parts.armR) p.ang.armR = (p.ang.armR ?? 0) + cssDeg(-(legFwd.legR ?? 0) * g.arms);
+    p.rot += w * (run ? 6 : 2.5) * mv.dir; // лёгкий наклон по ходу
+  } else {
+    const sway = Math.sin((Math.PI * dist) / stride);
+    if (rig.parts.armL) p.ang.armL = (p.ang.armL ?? 0) + w * 10 * g.arms * 4 * Math.max(0, sway);
+    if (rig.parts.armR) p.ang.armR = (p.ang.armR ?? 0) - w * 10 * g.arms * 4 * Math.max(0, -sway);
+    // Переваливание с ноги на ногу — туловищем над бёдрами (корень не наклоняем: иначе опорная стопа
+    // поехала бы вместе с фигурой); ноги — дети туловища, им наклон возвращаем обратно.
+    const root = rootOf(rig), tilt = w * 3 * sway;
+    p.ang[root] = (p.ang[root] ?? 0) + tilt;
+    for (const leg of ["legL", "legR"]) if (rig.parts[leg]?.parent === root) p.ang[leg] = (p.ang[leg] ?? 0) - tilt;
+  }
+  if (rig.parts.head) p.ang.head = (p.ang.head ?? 0) - p.rot * 0.5; // голова держит горизонт
+};
+
 /** Поза в момент t: покой (дыхание, моргание, лёгкое покачивание) + действия + запаздывание. */
 export const evaluate = (rig: RigDef, acts: RigAction[], t: number, o: { x: number; y: number; facing?: 1 | -1; height: number }) => {
   const at = placeAt(acts, t, o);
-  const p: Pose = { dx: 0, dy: 0, rot: 0, sx: 1, sy: 1, facing: at.facing, ang: {}, len: {}, scale: {}, alt: {} };
+  const p: Pose = { dx: 0, dy: 0, rot: 0, sx: 1, sy: 1, facing: at.facing, ang: {}, len: {}, scale: {}, alt: {}, off: {} };
   const has = (n: string) => Boolean(rig.parts[n]);
   const add = (n: string, v: number) => { if (has(n)) p.ang[n] = (p.ang[n] ?? 0) + v; };
   const out = (n: string, v: number) => add(n, side(n) * v); // наружу от тела
@@ -153,28 +275,10 @@ export const evaluate = (rig: RigDef, acts: RigAction[], t: number, o: { x: numb
   // Моргание по своему расписанию (детерминированно).
   for (let k = 0, tt = 0.9; tt < t + 0.2 && k < 400; tt += 2.2 + 2.6 * hash(k++)) if (t >= tt && t < tt + 0.13) alt(face, "blink");
 
-  // Ходьба / бег: ноги и руки вразмах, подскок, наклон по ходу.
+  // Ходьба / бег: шаг от пройденного пути — опорная стопа стоит, маховая переносится (см. gait).
   const mv = at.moving;
   if (mv && mv.kind !== "move") {
-    const run = mv.kind === "run";
-    const w = env(t, mv.at, mv.end, 0.15), ph = (t - mv.at) * (run ? 2.6 : 1.8) * TAU, s = Math.sin(ph);
-    if (rig.view === "side") {
-      add("legL", w * (run ? 26 : 16) * s); add("legR", -w * (run ? 26 : 16) * s);
-      add("shinL", w * 12 * Math.max(0, -s)); add("shinR", w * 12 * Math.max(0, s));
-      if (has("legL")) p.len.legL = 1 - 0.1 * w * Math.max(0, s);
-      if (has("legR")) p.len.legR = 1 - 0.1 * w * Math.max(0, -s);
-      add("armL", -w * (run ? 30 : 18) * s); add("armR", -w * (run ? 30 : 18) * s);
-    } else {
-      // Анфас: шаг — нога приподнимается (короче) и чуть уходит наружу, тело переваливается.
-      if (has("legL")) p.len.legL = 1 - (run ? 0.22 : 0.16) * w * Math.max(0, s);
-      if (has("legR")) p.len.legR = 1 - (run ? 0.22 : 0.16) * w * Math.max(0, -s);
-      out("legL", w * 6 * Math.max(0, s)); out("legR", w * 6 * Math.max(0, -s));
-      out("armL", w * (run ? 22 : 12) * Math.max(0, -s)); out("armR", w * (run ? 22 : 12) * Math.max(0, s));
-      add("torso", w * 3 * s);
-    }
-    p.dy -= w * (run ? 0.05 : 0.03) * H * Math.abs(s);
-    p.rot += w * (run ? 7 : 3) * mv.dir;
-    add("head", -w * 2 * s);
+    gait(rig, p, mv, env(t, mv.at, mv.end, 0.15), H, mv.dir * at.facing);
   } else if (mv) {
     const w = env(t, mv.at, mv.end, 0.2);
     p.rot += w * 4 * mv.dir; p.dy -= w * 0.04 * H * Math.sin(Math.PI * clamp((t - mv.at) / (mv.end - mv.at), 0, 1));
@@ -253,7 +357,7 @@ export const evaluate = (rig: RigDef, acts: RigAction[], t: number, o: { x: numb
   return { x: at.x, y: at.y, pose: p };
 };
 
-const restPose = (): Pose => ({ dx: 0, dy: 0, rot: 0, sx: 1, sy: 1, facing: 1, ang: {}, len: {}, scale: {}, alt: {} });
+const restPose = (): Pose => ({ dx: 0, dy: 0, rot: 0, sx: 1, sy: 1, facing: 1, ang: {}, len: {}, scale: {}, alt: {}, off: {} });
 
 const hosePath = (len: number, ang: number) => {
   const bx = -clamp(ang, -120, 120) / 120 * len * 0.22;
@@ -270,7 +374,8 @@ export const drawList = (rig: RigDef, pose: Pose, rootM: Mat): DrawItem[] => {
     const p = rig.parts[n];
     const ang = (p.rest ?? 0) + (pose.ang[n] ?? 0);
     const sc = pose.scale[n] ?? 1, ln = pose.len[n] ?? 1;
-    const base = n === root ? chain(rootM, R(ang)) : chain(parentM, T(...(p.at ?? [0, 0])), R(ang), S(sc, sc * ln));
+    const off = pose.off?.[n] ?? [0, 0];
+    const base = n === root ? chain(rootM, R(ang)) : chain(parentM, T((p.at?.[0] ?? 0) + off[0], (p.at?.[1] ?? 0) + off[1]), R(ang), S(sc, sc * ln));
     const z = p.z ?? parentZ;
     if (p.hose) {
       items.push({ name: n, kind: "hose", d: hosePath(p.hose.len, pose.ang[n] ?? 0), len: p.hose.len, width: p.hose.width, color: p.hose.color, outline: p.hose.outline, endR: p.hose.endR, endColor: p.hose.endColor, m: base, z, order: order++ });

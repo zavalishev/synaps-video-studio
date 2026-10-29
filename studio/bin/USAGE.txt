@@ -81,7 +81,7 @@ studio <инструмент> [аргументы]      — запускать �
       × тон акцента), «дом студии» (клетка, подача, голос шрифта), журнал облика соседей и лист
       out/recent-looks.png (кадр 0 соседей). --note — дописать свой облик в журнал студии.
 
-  studio rig cut <лист.png> [--name x] [--object --limb "#цвет"] | studio rig check public/rig/<x>/rig.json [--poses …] [--joints]
+  studio rig cut <лист.png> [--name x] [--side] [--object --limb "#цвет"] | studio rig check public/rig/<x>/rig.json [--poses …] [--joints]
       скелетная анимация (скилл rig-2d): лист частей героя (studio image --bg transparent) → части,
       скелет-черновик public/rig/<x>/rig.json и лист с подписями; check — лист поз той же математикой,
       что <Rig> в кадре. Бесплатно, локально, секунды.

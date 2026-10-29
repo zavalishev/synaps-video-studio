@@ -57,6 +57,41 @@ describe("скелет", () => {
     expect(end.facing).toBe(-1);
   });
 
+  it("при ходьбе опорная стопа не скользит по земле, а шаг выше земли не уходит", () => {
+    const shin = { src: "s.png", w: 30, h: 60, pivot: [15, 4] as [number, number] };
+    const variants: RigDef[] = [
+      { ...rig, view: "side" },
+      { ...rig, view: "front" },
+      { ...rig, view: "side", parts: { ...rig.parts, legL: { ...rig.parts.legL, h: 50 }, legR: { ...rig.parts.legR, h: 50 },
+        shinL: { ...shin, parent: "legL", at: [17, 46] }, shinR: { ...shin, parent: "legR", at: [17, 46] } } },
+    ];
+    for (const r of variants) {
+      const rest = restBounds(r);
+      const acts = [{ do: "walk" as const, at: 0, to: [2500, 1600] as [number, number] }];
+      const o = { x: 500, y: 1600, height: 800 };
+      const foot = (t: number, leg: "L" | "R") => {
+        const st = evaluate(r, acts, t, o);
+        const items = drawList(r, st.pose, rootMatrix(r, rest, st.x, st.y, 800, st.pose));
+        const name = r.parts[`shin${leg}`] ? `shin${leg}` : `leg${leg}`;
+        const it = items.find((i) => i.name === name)!;
+        if (it.kind !== "img") throw new Error("img");
+        return apply(it.m, [r.parts[name].pivot![0], r.parts[name].h! * 0.94 + r.parts[name].pivot![1] * 0.06]);
+      };
+      // Середина пути (ровная скорость, тело ~16 px/кадр): на каждом кадре одна из стоп стоит.
+      // Допуск — кадр смены ноги (одна ставится, другая отрывается): там обе чуть движутся.
+      const mins: number[] = [];
+      let lowest = -Infinity;
+      for (let t = 1.0; t < 2.0; t += 1 / 30) {
+        mins.push(Math.min(...(["L", "R"] as const).map((s) => Math.abs(foot(t + 1 / 30, s)[0] - foot(t, s)[0]))));
+        for (const s of ["L", "R"] as const) lowest = Math.max(lowest, foot(t, s)[1]);
+      }
+      const calm = mins.filter((v) => v < 1.5).length / mins.length;
+      expect(calm, `${r.view}: доля кадров без скольжения`).toBeGreaterThan(0.8);
+      expect(Math.max(...mins), `${r.view}: худший кадр`).toBeLessThan(4);
+      expect(lowest, r.view).toBeLessThan(1600 + 8); // стопа не проваливается под землю
+    }
+  });
+
   it("взмах поднимает руку наружу и вверх, моргание и речь меняют голову", () => {
     const up = evaluate(rig, [{ do: "wave", at: 0, arm: "R" }], 0.8, { x: 0, y: 0, height: 100 }).pose;
     expect(up.ang.armR).toBeLessThan(-120); // правая рука: наружу — против часовой
@@ -109,5 +144,23 @@ describe("studio rig cut", () => {
     const c = spawnSync(join(ROOT, "node_modules/.bin/tsx"), [join(ROOT, "studio/bin/rig.ts"), "check", "public/rig/box/rig.json", "--job", dir], { encoding: "utf8" });
     expect(c.status, c.stderr).toBe(0);
     expect(existsSync(join(dir, "out/rig-box-check.png"))).toBe(true);
+  }, 30000);
+
+  it("--side: четыре части ног внизу → бёдра и голени, герой в профиль", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "rig-side-"));
+    writeFileSync(join(dir, "job.json"), JSON.stringify({ width: 1080, height: 1920, fps: 30 }));
+    const box = (x: number, y: number, w: number, h: number) => ({ input: { create: { width: w, height: h, channels: 4 as const, background: { r: 90, g: 140, b: 200, alpha: 1 } } }, left: x, top: y });
+    await sharp({ create: { width: 1000, height: 700, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+      .composite([box(100, 20, 120, 110), box(300, 20, 120, 110), box(500, 20, 120, 110),
+        box(420, 200, 140, 170), box(280, 200, 50, 150), box(650, 200, 50, 150),
+        box(250, 460, 55, 100), box(380, 460, 50, 110), box(560, 460, 55, 100), box(690, 460, 50, 110)])
+      .png().toFile(join(dir, "sheet.png"));
+    const r = spawnSync(join(ROOT, "node_modules/.bin/tsx"), [join(ROOT, "studio/bin/rig.ts"), "cut", "sheet.png", "--name", "s", "--side", "--job", dir], { encoding: "utf8" });
+    expect(r.status, r.stderr).toBe(0);
+    const out = JSON.parse(readFileSync(join(dir, "public/rig/s/rig.json"), "utf8")) as RigDef;
+    expect(out.view).toBe("side");
+    expect(out.parts.shinL?.parent).toBe("legL");
+    expect(out.parts.shinR?.parent).toBe("legR");
+    expect(validateRig(out)).toEqual([]);
   }, 30000);
 });
