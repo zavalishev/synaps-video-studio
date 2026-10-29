@@ -189,7 +189,12 @@ const gait = (rig: RigDef, p: Pose, mv: Moving, w: number, H: number, localDir: 
   const view = rig.view === "side" ? "side" : "front", run = mv.kind === "run";
   const g = GAIT[view][run ? "run" : "walk"];
   const restH = restHeight(rig), k = H / restH; // пиксели скелета → пиксели кадра
-  const stride = g.stride * restH, dist = mv.dist / k;
+  const dist = mv.dist / k, len = mv.len / k;
+  // Шаг подгоняется под путь: в профиль стопы стоят вместе через каждые stride пути, анфас — через
+  // каждый цикл 2·stride. Целое число таких отрезков = герой трогается и останавливается со стопами
+  // вместе, без доводки ноги «по полу» в последний момент.
+  const unit = (view === "side" ? 1 : 2) * g.stride * restH;
+  const stride = (len > 1e-6 ? len / Math.max(1, Math.round(len / unit)) : unit) / (view === "side" ? 1 : 2);
   const cssDeg = (forward: number) => -forward * localDir; // «вперёд» → угол CSS (по часовой)
   // Анфас: ведущая нога — та, что со стороны движения (по точке крепления к туловищу).
   const lx = rig.parts.legL?.at?.[0] ?? 0, rx = rig.parts.legR?.at?.[0] ?? 0;
@@ -203,7 +208,8 @@ const gait = (rig: RigDef, p: Pose, mv: Moving, w: number, H: number, localDir: 
     const l1 = segLen(thigh), l2 = shin ? segLen(shin) : 0, L = l1 + l2;
     let fx: number, up = 0, planted: boolean;
     if (view === "side") {
-      const c = (((dist / (2 * stride) + ph0) % 1) + 1) % 1;
+      // +0,25: в начале пути опорная стопа под бедром, маховая рядом с ней (стопы вместе).
+      const c = (((dist / (2 * stride) + ph0 + 0.25) % 1) + 1) % 1;
       planted = c < 0.5;
       if (planted) fx = stride / 2 - (c / 0.5) * stride; // опора: стопа на месте, тело уходит вперёд
       else {
@@ -224,9 +230,12 @@ const gait = (rig: RigDef, p: Pose, mv: Moving, w: number, H: number, localDir: 
       fx = foot - body;
       if (moving) up = g.lift * L * Math.sin(Math.PI * u);
     }
-    fx *= w; up *= w;
+    // Положение стопы НЕ умножаем на плавный вход w: иначе опорная стопа едет по полу на старте
+    // и на остановке. Вход/выход сглаживают только подъём ноги и сгиб колена.
+    up *= w;
     const reach = Math.min(Math.abs(fx), 0.85 * L);
-    const hip = Math.sqrt(Math.max(0, (0.985 * L) ** 2 - reach * reach)); // высота бедра над опорной стопой
+    const bent = Math.sqrt(Math.max(0, (0.985 * L) ** 2 - reach * reach)); // высота бедра над опорной стопой
+    const hip = bent + (1 - w) * (Math.sqrt(Math.max(0, (0.999 * L) ** 2 - reach * reach)) - bent);
     if (planted) drop = Math.max(drop, L - hip);
     if (shin) {
       const ik = legIK(fx, hip - up, l1, l2);
@@ -261,7 +270,10 @@ const gait = (rig: RigDef, p: Pose, mv: Moving, w: number, H: number, localDir: 
 };
 
 /** Поза в момент t: покой (дыхание, моргание, лёгкое покачивание) + действия + запаздывание. */
-export const evaluate = (rig: RigDef, acts: RigAction[], t: number, o: { x: number; y: number; facing?: 1 | -1; height: number }) => {
+/** Число из строки (имя героя) — чтобы у разных героев было своё расписание моргания и дыхания. */
+const seedOf = (s: string) => { let h = 7; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) % 1000003; return h; };
+
+export const evaluate = (rig: RigDef, acts: RigAction[], t: number, o: { x: number; y: number; facing?: 1 | -1; height: number; seed?: string }) => {
   const at = placeAt(acts, t, o);
   const p: Pose = { dx: 0, dy: 0, rot: 0, sx: 1, sy: 1, facing: at.facing, ang: {}, len: {}, scale: {}, alt: {}, off: {} };
   const has = (n: string) => Boolean(rig.parts[n]);
@@ -270,17 +282,21 @@ export const evaluate = (rig: RigDef, acts: RigAction[], t: number, o: { x: numb
   const alt = (n: string, k: string) => { if (rig.parts[n]?.alt?.[k]) p.alt[n] = k; };
   const H = o.height;
   const face = has("head") ? "head" : rootOf(rig);
+  // В профиль ближняя к зрителю рука — та, что рисуется поверх (больше z); дальняя уходит за спину.
+  const nearArm: "L" | "R" = rig.view === "side" && (rig.parts.armL?.z ?? 0) > (rig.parts.armR?.z ?? 0) ? "L" : "R";
 
   // Разворот: не мгновенное зеркало, а мультяшный «переворот» по ширине (−1 → 0 → 1 за TURN_SEC).
   if (t >= at.turnedAt && t < at.turnedAt + TURN_SEC) p.sx *= -Math.cos(Math.PI * sm((t - at.turnedAt) / TURN_SEC));
 
-  // Покой: дыхание, голова, руки чуть отведены.
-  const br = Math.sin((TAU * t) / 2.4);
+  // Покой: дыхание, голова, руки чуть отведены. Фаза — своя у каждого героя (по имени),
+  // иначе два героя в кадре дышат и моргают синхронно, как один.
+  const seed = seedOf(o.seed ?? rig.name ?? ""), ph = TAU * hash(seed);
+  const br = Math.sin((TAU * t) / 2.4 + ph);
   p.sy *= 1 + 0.012 * br;
-  add("head", 2 * Math.sin((TAU * t) / 3.3 + 0.7));
-  out("armL", 4 + 2 * br); out("armR", 4 + 2 * Math.sin((TAU * t) / 2.4 + 0.5));
-  // Моргание по своему расписанию (детерминированно).
-  for (let k = 0, tt = 0.9; tt < t + 0.2 && k < 400; tt += 2.2 + 2.6 * hash(k++)) if (t >= tt && t < tt + 0.13) alt(face, "blink");
+  add("head", 2 * Math.sin((TAU * t) / 3.3 + 0.7 + ph));
+  out("armL", 4 + 2 * br); out("armR", 4 + 2 * Math.sin((TAU * t) / 2.4 + 0.5 + ph));
+  // Моргание по своему расписанию (детерминированно, своё у каждого героя).
+  for (let k = 0, tt = 0.5 + 1.6 * hash(seed + 0.5); tt < t + 0.2 && k < 400; tt += 2.2 + 2.6 * hash(seed + k++)) if (t >= tt && t < tt + 0.13) alt(face, "blink");
 
   // Ходьба / бег: шаг от пройденного пути — опорная стопа стоит, маховая переносится (см. gait).
   const mv = at.moving;
@@ -304,7 +320,7 @@ export const evaluate = (rig: RigDef, acts: RigAction[], t: number, o: { x: numb
         break;
       }
       case "wave": case "point": {
-        const arm = `arm${a.arm ?? "R"}`, w = env(t, a.at, end, 0.25);
+        const arm = `arm${a.arm ?? nearArm}`, w = env(t, a.at, end, 0.25);
         if (a.do === "wave") { out(arm, w * ((a.angle ?? 150) + 18 * Math.sin(TAU * 2.6 * lt))); add("head", -side(arm) * w * 4); }
         else out(arm, w * (a.angle ?? 80));
         break;

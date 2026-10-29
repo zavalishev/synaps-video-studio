@@ -92,6 +92,63 @@ describe("скелет", () => {
     }
   });
 
+  it("на старте и остановке стопа не едет по полу, а ноги не дёргаются после шага", () => {
+    const shin = { src: "s.png", w: 30, h: 60, pivot: [15, 4] as [number, number] };
+    const variants: RigDef[] = [
+      { ...rig, view: "front" },
+      { ...rig, view: "side", parts: { ...rig.parts, legL: { ...rig.parts.legL, h: 50 }, legR: { ...rig.parts.legR, h: 50 },
+        shinL: { ...shin, parent: "legL", at: [17, 46] }, shinR: { ...shin, parent: "legR", at: [17, 46] } } },
+    ];
+    // Пути не кратны шагу: шаг сам подгоняется под путь.
+    for (const r of variants) for (const tx of [1300, 1170, 640]) {
+      const rest = restBounds(r);
+      const acts = [{ do: "walk" as const, at: 0.5, to: [tx, 1600] as [number, number] }];
+      const o = { x: 500, y: 1600, height: 800 };
+      const end = 0.5 + Math.max(0.5, (tx - 500) / (0.6 * 800));
+      const feet = (t: number) => {
+        const st = evaluate(r, acts, t, o);
+        const items = drawList(r, st.pose, rootMatrix(r, rest, st.x, st.y, 800, st.pose));
+        return (["L", "R"] as const).map((leg) => {
+          const name = r.parts[`shin${leg}`] ? `shin${leg}` : `leg${leg}`;
+          const it = items.find((i) => i.name === name)!;
+          return apply(it.m, [r.parts[name].pivot![0], r.parts[name].h! * 0.94 + r.parts[name].pivot![1] * 0.06]);
+        });
+      };
+      const label = `${r.view} → ${tx}`;
+      for (const [t0, t1] of [[0.4, 0.8], [end - 0.3, end + 0.5]]) {
+        let worst = 0;
+        for (let t = t0; t < t1; t += 1 / 30) {
+          const a = feet(t), b = feet(t + 1 / 30);
+          worst = Math.max(worst, Math.min(...a.map((q, i) => Math.abs(b[i][0] - q[0]))));
+        }
+        expect(worst, `${label}: опорная стопа на ${t0.toFixed(1)}–${t1.toFixed(1)} с`).toBeLessThan(4); // как в середине пути: допуск — кадр смены ноги
+      }
+      // В конце пути тело уже тормозит: ни одна нога не дёргается и не «прыгает» в позу покоя.
+      let jump = 0;
+      for (let t = end - 1 / 30; t < end + 0.5; t += 1 / 30) {
+        const a = feet(t), b = feet(t + 1 / 30);
+        jump = Math.max(jump, ...a.map((q, i) => Math.hypot(b[i][0] - q[0], b[i][1] - q[1])));
+      }
+      expect(jump, `${label}: рывок ноги при остановке`).toBeLessThan(10); // «прыжок» в позу покоя — это 100+ px
+      // После остановки стопы стоят так же, как в покое до шага (никакой ноги, оставшейся в шаге).
+      const gap = (t: number) => { const [l, rr] = feet(t); return l[0] - rr[0]; };
+      expect(Math.abs(gap(end + 0.6) - gap(0.2)), `${label}: стопы как в покое`).toBeLessThan(0.02 * 800);
+    }
+  });
+
+  it("два героя моргают и дышат не синхронно; в профиль машет ближняя рука", () => {
+    const head = { ...rig.parts.head, alt: { blink: "b.png" } };
+    const blinks = (seed: string) => Array.from({ length: 600 }, (_, f) => f)
+      .filter((f) => evaluate({ ...rig, parts: { ...rig.parts, head } }, [], f / 30, { x: 0, y: 0, height: 100, seed }).pose.alt.head === "blink");
+    const a = blinks("медведь"), b = blinks("зерно");
+    expect(a.length).toBeGreaterThan(2);
+    expect(a.filter((f) => b.includes(f)).length / a.length).toBeLessThan(0.5);
+    const side: RigDef = { ...rig, view: "side", parts: { ...rig.parts, armL: { ...rig.parts.armL, z: 3 }, armR: { ...rig.parts.armR, z: -1 } } };
+    const p = evaluate(side, [{ do: "wave", at: 0 }], 0.8, { x: 0, y: 0, height: 100 }).pose;
+    expect(Math.abs(p.ang.armL ?? 0)).toBeGreaterThan(120);
+    expect(Math.abs(p.ang.armR ?? 0)).toBeLessThan(40);
+  });
+
   it("разворот — переворот по ширине за доли секунды, а не мгновенное зеркало", () => {
     const acts = [{ do: "walk" as const, at: 0, to: [900, 0] as [number, number], dur: 1 }, { do: "walk" as const, at: 2, to: [100, 0] as [number, number], dur: 1 }];
     const vis = (t: number) => { const s = evaluate(rig, acts, t, { x: 500, y: 0, height: 100 }); return s.pose.facing * s.pose.sx; };

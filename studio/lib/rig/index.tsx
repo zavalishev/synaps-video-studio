@@ -43,7 +43,7 @@ export const Rig: React.FC<RigProps> = ({ rig, x, y, height, facing = 1, actions
     return restBounds(rig);
   }, [rig]);
   const t = frame / fps - delay;
-  const st = evaluate(rig, actions, t, { x, y, facing, height });
+  const st = evaluate(rig, actions, t, { x, y, facing, height, seed: id ?? rig.name });
   const items = drawList(rig, st.pose, rootMatrix(rig, rest, st.x, st.y, height, st.pose));
   const bb = bounds(items);
   const lift = Math.max(0, -st.pose.dy) / height;
