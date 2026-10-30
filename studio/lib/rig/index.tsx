@@ -12,7 +12,7 @@
 // Время действий — секунды от начала сцены (Sequence), delay сдвигает все.
 import React, { useMemo } from "react";
 import { Img, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
-import { bounds, css, drawList, evaluate, restBounds, rootMatrix, validateRig, type RigAction, type RigDef } from "./pose";
+import { bounds, css, drawList, evaluate, legShare, restBounds, rootMatrix, validateRig, type RigAction, type RigDef } from "./pose";
 
 export * from "./pose";
 
@@ -47,7 +47,11 @@ export const Rig: React.FC<RigProps> = ({ rig, x, y, height, facing = 1, actions
   const items = drawList(rig, st.pose, rootMatrix(rig, rest, st.x, st.y, height, st.pose));
   const bb = bounds(items);
   const lift = Math.max(0, -st.pose.dy) / height;
-  const shadowColor = typeof shadow === "string" ? shadow : "rgba(0,0,0,0.28)";
+  // Анфас вбок герой переступает приставным шагом: подход до роста — живо, дальше — «шарканье».
+  // Пометка для самопроверки (длина пути в ростах), сама картинка от неё не меняется. Без ног — не шагает.
+  const mv = st.moving;
+  const shuffle = rig.view !== "side" && legShare(rig) > 0 && mv && mv.kind !== "move" && mv.len * mv.hx > height ? ((mv.len * mv.hx) / height).toFixed(1) : "";
+  const shadowColor =typeof shadow === "string" ? shadow : "rgba(0,0,0,0.28)";
   const sw = height * 0.42 * (1 - 0.5 * Math.min(1, lift * 2.5));
   return (
     <>
@@ -55,6 +59,7 @@ export const Rig: React.FC<RigProps> = ({ rig, x, y, height, facing = 1, actions
         <div style={{ position: "absolute", left: st.x - sw / 2, top: st.y - height * 0.025, width: sw, height: height * 0.05, borderRadius: "50%", background: `radial-gradient(closest-side, ${shadowColor}, transparent)`, opacity: 1 - 0.6 * Math.min(1, lift * 2.5) }} />
       )}
       <div data-id={id ?? rig.name ?? "rig"} {...(hero ? { "data-hero": "" } : {})} data-acting=""
+        {...(shuffle ? { "data-rig-shuffle": shuffle } : {})}
         style={{ position: "absolute", left: bb.x, top: bb.y, width: bb.w, height: bb.h, filter }}>
         {items.map((it) => it.kind === "img" ? (
           <Img key={it.name} src={staticFile(it.src)}

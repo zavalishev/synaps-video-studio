@@ -168,6 +168,7 @@ export const FrameAudit: React.FC<Opts> = ({ safe, minTextFrac = 0.03, tolerance
       if (world) notes.add("world");
       if (el.closest("[data-acting]")) notes.add("acting");
       if (el.hasAttribute("data-accent")) notes.add("accent");
+      if (el.hasAttribute("data-rig-shuffle")) notes.add("rig-shuffle");
       const tag = el.tagName.toLowerCase();
       if (tag !== "svg" && (el as SVGElement).ownerSVGElement) {
         // Внутри svg меряем svg целиком — кроме помеченных ролей: герой-<g> (кукла в сцене-svg),

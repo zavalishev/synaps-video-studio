@@ -117,8 +117,9 @@ const LIMB = /^(arm|leg)[LR]$/;
 const DUR: Record<string, number> = { hop: 0.95, wave: 1.6, point: 1.5, cheer: 1.4, talk: 1.5, sleep: 2, nod: 0.8, shiver: 1.2, surprise: 0.8, look: 1.2, pose: 1.2 };
 export const actionEnd = (a: RigAction): number => (a.do === "turn" ? a.at : a.at + ("dur" in a && a.dur ? a.dur : DUR[a.do] ?? 1));
 
-/** dist — сколько пройдено от начала перехода (пиксели кадра): по нему, а не по часам, считается шаг. */
-type Moving = { at: number; end: number; kind: "walk" | "run" | "move"; dir: number; dist: number; len: number };
+/** dist — сколько пройдено от начала перехода (пиксели кадра): по нему, а не по часам, считается шаг.
+ *  hx — доля пути по горизонтали (|Δx| / путь): шаг идёт по полу, вглубь кадра (по y) стопа не шагает. */
+type Moving = { at: number; end: number; kind: "walk" | "run" | "move"; dir: number; dist: number; len: number; hx: number };
 
 /** Доля пути к моменту u (0..1) при скорости-трапеции: разгон и торможение по `r` с каждой стороны,
  *  посередине — ровный ход. Ровная скорость нужна, чтобы шаг совпадал с перемещением (ноги не скользят). */
@@ -130,27 +131,46 @@ export const travel = (u: number, r: number) => {
   return (x - r / 2) / (1 - r);
 };
 
-/** Где корень (точка на земле под героем) и куда он смотрит в момент t. */
-export const placeAt = (acts: RigAction[], t: number, o: { x: number; y: number; facing?: 1 | -1; height: number }) => {
+/** Скорость по умолчанию, длин ноги в секунду: в профиль ≈1,6–1,8 шага/с при шаге ≈0,7 ноги.
+ *  От ноги, а не от роста: длинноногий идёт быстрее коротконогого при том же характере шага. Снизу —
+ *  предел в ростах (SPEED_FLOOR): коротконогий не должен ползти так, что сцена его не дождётся. */
+const LEG_SPEED = { side: { walk: 1.1, run: 2.7 }, front: { walk: 1.1, run: 2.4 } } as const;
+const SPEED_FLOOR = { walk: 0.4, run: 0.9 } as const;
+/** Скорость по умолчанию, пиксели кадра в секунду. leg — длина ноги в пикселях кадра (0/нет — от роста). */
+export const defaultSpeed = (kind: "walk" | "run" | "move", o: { height: number; leg?: number; view?: "front" | "side" }) =>
+  kind === "move" ? 0.8 * o.height
+    : o.leg ? Math.max(LEG_SPEED[o.view ?? "front"][kind] * o.leg, SPEED_FLOOR[kind] * o.height)
+      : (kind === "run" ? 1.4 : 0.6) * o.height;
+
+/** Где корень (точка на земле под героем) и куда он смотрит в момент t.
+ *  leg — длина ноги в пикселях кадра (evaluate знает её по скелету); без неё скорость — от роста.
+ *  Переходы идут очередью: следующий начинается не раньше, чем кончился предыдущий (а не «из
+ *  прошлого» — иначе герой прыгал бы на уже пройденную часть второго пути). */
+export const placeAt = (acts: RigAction[], t: number, o: { x: number; y: number; facing?: 1 | -1; height: number; leg?: number; view?: "front" | "side" }) => {
   let x = o.x, y = o.y, facing: 1 | -1 = o.facing ?? 1, moving: Moving | null = null, turnedAt = -Infinity;
+  let stopped: { end: number; dir: number; kind: Moving["kind"] } | null = null;
+  let free = -Infinity; // когда кончился предыдущий переход
   const face = (f: 1 | -1, at: number) => { if (f !== facing) { facing = f; turnedAt = at; } };
   for (const a of [...acts].sort((p, q) => p.at - q.at)) {
     if (t < a.at) break;
     if (a.do === "turn") { face(a.facing, a.at); continue; }
     if (a.do !== "walk" && a.do !== "run" && a.do !== "move") continue;
+    const start = Math.max(a.at, free);
+    if (t < start) break;
     const [tx, ty] = a.to;
     const len = Math.hypot(tx - x, ty - y);
-    const speed = (a.do === "run" ? 1.4 : a.do === "move" ? 0.8 : 0.6) * o.height;
-    const dur = a.dur ?? Math.max(0.5, len / speed);
+    const dur = a.dur ?? Math.max(0.5, len / defaultSpeed(a.do, o));
     const dir = Math.sign(tx - x) || facing;
-    if (a.face !== false && tx !== x) face(dir > 0 ? 1 : -1, a.at);
-    const u = clamp((t - a.at) / dur, 0, 1);
+    if (a.face !== false && tx !== x) face(dir > 0 ? 1 : -1, start);
+    const u = clamp((t - start) / dur, 0, 1);
     // Разгон/торможение ~0,25 с (не больше трети пути с каждой стороны).
     const e = travel(u, Math.min(0.3, 0.25 / dur));
-    if (u < 1) { moving = { at: a.at, end: a.at + dur, kind: a.do, dir, dist: len * e, len }; x += (tx - x) * e; y += (ty - y) * e; break; }
+    free = start + dur;
+    if (u < 1) { moving = { at: start, end: start + dur, kind: a.do, dir, dist: len * e, len, hx: len > 0 ? Math.abs(tx - x) / len : 1 }; x += (tx - x) * e; y += (ty - y) * e; break; }
     x = tx; y = ty;
+    stopped = len > 0 ? { end: start + dur, dir, kind: a.do } : stopped;
   }
-  return { x, y, facing, moving, turnedAt };
+  return { x, y, facing, moving, turnedAt, stopped };
 };
 
 /** Разворот длится столько секунд: фигура сжимается по ширине и раскрывается в другую сторону. */
@@ -166,6 +186,11 @@ const restHeight = (rig: RigDef) => {
 
 /** Длина звена от сустава до низа (пиксели своей картинки). */
 const segLen = (p?: RigPart) => (!p ? 0 : p.hose ? p.hose.len : Math.max(1, (p.h ?? 0) - (p.pivot?.[1] ?? 0)) * 0.94);
+/** Бедро с голенью: длина — от тазобедренного сустава до колена (точки крепления голени), а не до низа
+ *  картинки бедра. Картинка обычно длиннее (колено нарисовано с запасом), и тогда стопа встаёт не там,
+ *  где её ставит расчёт шага, — опорная нога едет по полу, тем сильнее, чем больше сгиб (бег). */
+const thighLen = (thigh: RigPart, shin?: RigPart) =>
+  shin && !shin.hose && !thigh.hose && shin.at ? Math.max(1, Math.hypot(shin.at[0] - (thigh.pivot?.[0] ?? 0), shin.at[1] - (thigh.pivot?.[1] ?? 0))) : segLen(thigh);
 
 /** Двухзвенная нога: стопа в точке (fx вперёд, fy вниз) от бедра. Углы — «вперёд положительно», градусы:
  *  бедро от вертикали, голень относительно бедра (колено вперёд, голень назад). */
@@ -178,41 +203,94 @@ export const legIK = (fx: number, fy: number, l1: number, l2: number) => {
   return { thigh: (aim + knee) * deg, shin: -(Math.PI - inner) * deg };
 };
 
-type Gait = { stride: number; lift: number; bob: number; arms: number };
+/** Длина ноги в долях роста (бедро + голень; у резиновой — её длина). 0 — ног нет. */
+export const legShare = (rig: RigDef) => {
+  const leg = rig.parts.legL ?? rig.parts.legR;
+  if (!leg) return 0;
+  const shin = rig.parts.legL ? rig.parts.shinL : rig.parts.shinR;
+  return (thighLen(leg, shin) + segLen(shin)) / restHeight(rig);
+};
+
+/** Наклон туловища (градусы по часовой, в осях героя) — над бёдрами, а не вокруг стоп: корень-фигуру
+ *  не крутим (иначе опорная стопа поедет и уйдёт под пол), ногам наклон возвращаем, голова держит
+ *  горизонт наполовину. */
+const leanTorso = (rig: RigDef, p: Pose, deg: number) => {
+  if (!deg) return;
+  const root = rootOf(rig);
+  p.ang[root] = (p.ang[root] ?? 0) + deg;
+  // Ноги крепятся к туловищу не в точке его вращения (бёдра шире): при наклоне точки крепления ушли бы
+  // вверх-вниз и опорная стопа — под пол. Сдвигаем крепление назад: at' = pivot + R(−deg)·(at − pivot).
+  const pv = rig.parts[root].pivot ?? [0, 0], r = (-deg * Math.PI) / 180, c = Math.cos(r), sn = Math.sin(r);
+  for (const leg of ["legL", "legR"]) {
+    const part = rig.parts[leg];
+    if (part?.parent !== root) continue;
+    p.ang[leg] = (p.ang[leg] ?? 0) - deg;
+    const ax = (part.at?.[0] ?? 0) - pv[0], ay = (part.at?.[1] ?? 0) - pv[1];
+    const o = p.off[leg] ?? [0, 0];
+    p.off[leg] = [o[0] + pv[0] + c * ax - sn * ay - (part.at?.[0] ?? 0), o[1] + pv[1] + sn * ax + c * ay - (part.at?.[1] ?? 0)];
+  }
+  if (rig.parts.head?.parent === root) p.ang.head = (p.ang.head ?? 0) - deg * 0.5;
+};
+
+// Цифры шага — с разбора чужих мультяшных походок (маскот HeyGen, Lemo, Clawd): короткий частый шаг,
+// руки с запаздыванием, кивок на каждом шаге, наклон вперёд, доигрыш корпуса после остановки.
+type Gait = { stride: number; v0: number; min: number; max: number; lift: number; arms: number; lean: number; nod: number };
 const GAIT: Record<"front" | "side", Record<"walk" | "run", Gait>> = {
-  // stride — длина одного шага в долях роста; lift — подъём стопы в долях длины ноги.
-  side: { walk: { stride: 0.42, lift: 0.1, bob: 1, arms: 0.75 }, run: { stride: 0.62, lift: 0.2, bob: 1, arms: 1.1 } },
-  // Анфас при ходьбе вбок — приставной шаг: шаг короче, нога поднимается выше, корпус переваливается.
-  // stride здесь — половина цикла (ведущая шагает на 2·stride и вторая подтягивается).
-  front: { walk: { stride: 0.12, lift: 0.16, bob: 1, arms: 0.25 }, run: { stride: 0.17, lift: 0.24, bob: 1, arms: 0.4 } },
+  // stride — шаг (в длинах ноги) на обычной скорости v0 (длин ноги в секунду). Медленнее — шаг
+  // короче и реже, быстрее — длиннее и чаще (как у живых: шаг ∝ √скорости), в пределах min..max.
+  // lift — подъём стопы в длинах ноги; arms — размах рук, градусы; lean — наклон туловища;
+  // nod — кивок головы.
+  side: {
+    // Нижний предел шага не ниже 0,6 ноги: медленная прогулка — редкие шаги, а не семенящие на
+    // полусогнутых (у ботинка нет своего сустава: чем сильнее согнуто колено, тем сильнее носок
+    // смотрит вниз — «на цыпочках»). Пружина колена поэтому мягкая.
+    walk: { stride: 0.7, v0: 1.1, min: 0.6, max: 0.9, lift: 0.08, arms: 20, lean: 5, nod: 3 },
+    run: { stride: 1.0, v0: 2.7, min: 0.8, max: 1.3, lift: 0.22, arms: 36, lean: 11, nod: 4 },
+  },
+  // Анфас при ходьбе вбок — приставной шаг: полцикла шага (ведущая шагает на 2·stride, вторая
+  // подтягивается), нога поднимается выше, корпус переваливается. stride — полцикла.
+  front: {
+    walk: { stride: 0.38, v0: 1.1, min: 0.25, max: 0.5, lift: 0.16, arms: 10, lean: 0, nod: 2 },
+    run: { stride: 0.45, v0: 2.4, min: 0.3, max: 0.6, lift: 0.24, arms: 16, lean: 0, nod: 3 },
+  },
 };
 
 /** Ноги и руки при ходьбе/беге от пройденного пути: стопа опорной ноги неподвижна относительно земли. */
-const gait = (rig: RigDef, p: Pose, mv: Moving, w: number, H: number, localDir: number) => {
+const gait = (rig: RigDef, p: Pose, mv: Moving, w: number, H: number, localDir: number, wIn = w) => {
   const view = rig.view === "side" ? "side" : "front", run = mv.kind === "run";
   const g = GAIT[view][run ? "run" : "walk"];
   const restH = restHeight(rig), k = H / restH; // пиксели скелета → пиксели кадра
-  const dist = mv.dist / k, len = mv.len / k;
+  // Шаг — по полу: считается от горизонтальной доли пути (по диагонали корень по x идёт на cos θ, и
+  // шаг по всему пути обгонял бы тело — опорная стопа ехала бы). Совсем вертикальный путь (к зрителю/
+  // от зрителя) всё равно шагает, хоть и мельче, — иначе герой «плыл» бы.
+  const hx = Math.max(0.35, mv.hx);
+  const dist = (mv.dist / k) * hx, len = (mv.len / k) * hx;
+  // Длина ноги, пиксели скелета. Нет ног (призрак, рыба, бюст) — условная нога от роста, иначе шаг
+  // в доли пикселя и руки дёргаются хаотично.
+  const share = legShare(rig), Lg = (share > 0 ? share : 0.45) * restH;
+  // Средняя скорость перехода (пиксели скелета в секунду) — от неё длина шага (∝ √скорости).
+  const v = len / Math.max(0.05, mv.end - mv.at);
+  const want = Lg * (g.v0 > 0 ? clamp(g.stride * Math.sqrt(v / (g.v0 * Lg)), g.min, g.max) : g.stride);
   // Шаг подгоняется под путь: в профиль стопы стоят вместе через каждые stride пути, анфас — через
   // каждый цикл 2·stride. Целое число таких отрезков = герой трогается и останавливается со стопами
   // вместе, без доводки ноги «по полу» в последний момент.
-  const unit = (view === "side" ? 1 : 2) * g.stride * restH;
+  const unit = (view === "side" ? 1 : 2) * want;
   const stride = (len > 1e-6 ? len / Math.max(1, Math.round(len / unit)) : unit) / (view === "side" ? 1 : 2);
   const cssDeg = (forward: number) => -forward * localDir; // «вперёд» → угол CSS (по часовой)
   // Анфас: ведущая нога — та, что со стороны движения (по точке крепления к туловищу).
   const lx = rig.parts.legL?.at?.[0] ?? 0, rx = rig.parts.legR?.at?.[0] ?? 0;
   const lead = (rx - lx) * localDir >= 0 ? "legR" : "legL";
-  let drop = 0;
-  const legFwd: Record<string, number> = {};
+  type LegState = { leg: "legL" | "legR"; shinName: string; shin?: RigPart; l1: number; l2: number; L: number; fx: number; up: number; planted: boolean; c: number; hip: number };
+  const legs: LegState[] = [];
   for (const [leg, ph0] of [["legL", 0], ["legR", 0.5]] as const) {
     const thigh = rig.parts[leg];
     if (!thigh) continue;
     const shinName = leg === "legL" ? "shinL" : "shinR", shin = rig.parts[shinName];
-    const l1 = segLen(thigh), l2 = shin ? segLen(shin) : 0, L = l1 + l2;
-    let fx: number, up = 0, planted: boolean;
+    const l1 = thighLen(thigh, shin), l2 = shin ? segLen(shin) : 0, L = l1 + l2;
+    let fx: number, up = 0, planted: boolean, c: number;
     if (view === "side") {
       // +0,25: в начале пути опорная стопа под бедром, маховая рядом с ней (стопы вместе).
-      const c = (((dist / (2 * stride) + ph0 + 0.25) % 1) + 1) % 1;
+      c = (((dist / (2 * stride) + ph0 + 0.25) % 1) + 1) % 1;
       planted = c < 0.5;
       if (planted) fx = stride / 2 - (c / 0.5) * stride; // опора: стопа на месте, тело уходит вперёд
       else {
@@ -225,10 +303,11 @@ const gait = (rig: RigDef, p: Pose, mv: Moving, w: number, H: number, localDir: 
     } else {
       // Приставной шаг: за цикл (путь 2·stride) ведущая нога шагает в сторону, затем вторая
       // подтягивается к ней. Стопы не скрещиваются; опорная стоит, пока переносится другая.
-      const D = 2 * stride, c = (((dist / D) % 1) + 1) % 1, body = c * D;
+      const D = 2 * stride, cc = (((dist / D) % 1) + 1) % 1, body = cc * D;
       const isLead = leg === lead;
-      const moving = isLead ? c < 0.5 : c >= 0.5, u = isLead ? c / 0.5 : (c - 0.5) / 0.5;
+      const moving = isLead ? cc < 0.5 : cc >= 0.5, u = isLead ? cc / 0.5 : (cc - 0.5) / 0.5;
       planted = !moving;
+      c = moving ? 0.5 + u / 2 : 0;
       const foot = isLead ? (moving ? D * sm(u) : D) : (moving ? D * sm(u) : 0);
       fx = foot - body;
       if (moving) up = g.lift * L * Math.sin(Math.PI * u);
@@ -239,44 +318,77 @@ const gait = (rig: RigDef, p: Pose, mv: Moving, w: number, H: number, localDir: 
     const reach = Math.min(Math.abs(fx), 0.85 * L);
     const bent = Math.sqrt(Math.max(0, (0.985 * L) ** 2 - reach * reach)); // высота бедра над опорной стопой
     const hip = bent + (1 - w) * (Math.sqrt(Math.max(0, (0.999 * L) ** 2 - reach * reach)) - bent);
-    if (planted) drop = Math.max(drop, L - hip);
-    if (shin) {
-      const ik = legIK(fx, hip - up, l1, l2);
-      p.ang[leg] = (p.ang[leg] ?? 0) + cssDeg(ik.thigh);
-      p.ang[shinName] = (p.ang[shinName] ?? 0) + cssDeg(ik.shin);
-      legFwd[leg] = ik.thigh;
+    legs.push({ leg, shinName, shin, l1, l2, L, fx, up, planted, c, hip });
+  }
+  // Высота бёдер — по опорной ноге (ниже всего на постановке, выше над стопой); с коленом обе ноги
+  // считаются от этой общей высоты — маховая стопа идёт ровно на up над полом. Пружину колена (бёдра
+  // проседают после постановки) не делаем: у голени с ботинком нет голеностопа, и согнутое колено
+  // опускает носок — герой идёт «на цыпочках».
+  const planted = legs.filter((s) => s.planted);
+  // Колено сгибается только в профиль. Анфас колено гнётся к зрителю — на картинке нога прямая;
+  // изгиб вбок читается как перелом, поэтому анфас нога с голенью ведёт себя как одна прямая часть.
+  const knees = view === "side" && legs.length > 0 && legs.every((s) => s.shin);
+  const hipA = planted.length ? Math.min(...planted.map((s) => s.hip)) : Math.max(0, ...legs.map((s) => s.hip));
+  let drop = 0;
+  for (const s of legs) {
+    if (s.planted) drop = Math.max(drop, s.L - (knees ? hipA : s.hip));
+    if (s.shin && knees) {
+      const ik = legIK(s.fx, (knees ? hipA : s.hip) - s.up, s.l1, s.l2);
+      p.ang[s.leg] = (p.ang[s.leg] ?? 0) + cssDeg(ik.thigh);
+      p.ang[s.shinName] = (p.ang[s.shinName] ?? 0) + cssDeg(ik.shin);
     } else {
-      const a = (Math.asin(clamp(fx / L, -0.85, 0.85)) * 180) / Math.PI;
-      p.ang[leg] = (p.ang[leg] ?? 0) + cssDeg(a);
-      if (up > 0) p.off[leg] = [0, -up]; // нога поднимается целиком, без сплющивания картинки
-      legFwd[leg] = a;
+      const a = (Math.asin(clamp(s.fx / s.L, -0.85, 0.85)) * 180) / Math.PI;
+      p.ang[s.leg] = (p.ang[s.leg] ?? 0) + cssDeg(a);
+      if (s.up > 0) p.off[s.leg] = [0, -s.up]; // нога поднимается целиком, без сплющивания картинки
     }
   }
   // Бёдра идут по опорной ноге: ниже в момент постановки стопы, выше над ней.
-  p.dy += drop * k * g.bob - (run ? 0.03 * H * w * Math.abs(Math.sin((Math.PI * dist) / stride)) : 0);
-  // Руки — в противофазе ногам (правая рука с левой ногой).
+  p.dy += drop * k - (run ? 0.03 * H * w * Math.abs(Math.sin((Math.PI * dist) / stride)) : 0);
+  // Руки и голова — от фазы стопы. Видимый ход ноги (угол бедра) опережает фазу стопы на ~2,5 кадра,
+  // так что рука отстаёт от бедра на 2–3 кадра сама: «догоняет» шаг, а не машет в такт.
+  const lagged = dist;
   if (view === "side") {
-    if (rig.parts.armL) p.ang.armL = (p.ang.armL ?? 0) + cssDeg(-(legFwd.legL ?? 0) * g.arms);
-    if (rig.parts.armR) p.ang.armR = (p.ang.armR ?? 0) + cssDeg(-(legFwd.legR ?? 0) * g.arms);
-    p.rot += w * (run ? 6 : 2.5) * mv.dir; // лёгкий наклон по ходу
+    // Рука идёт с противоположной ногой: вперёд, когда своя нога сзади.
+    // Ход ноги ≈ cos(2π·c) (c — фаза ноги, см. выше), рука — со знаком минус.
+    for (const [arm, ph0] of [["armL", 0], ["armR", 0.5]] as const) {
+      if (!rig.parts[arm]) continue;
+      const c = lagged / (2 * stride) + ph0 + 0.25;
+      p.ang[arm] = (p.ang[arm] ?? 0) + cssDeg(-w * g.arms * Math.cos(TAU * c));
+    }
+    // Кивок: голова клонится вперёд на постановке каждой стопы (шаг = полцикла), с тем же запаздыванием.
+    if (rig.parts.head) p.ang.head = (p.ang.head ?? 0) - cssDeg(w * g.nod * Math.cos(TAU * (lagged / stride - 0.5)));
+    // Наклон вперёд по ходу — туловищем над бёдрами. Входит плавно, а к концу пути не гаснет: после
+    // остановки его подхватывает доигрыш (settle) с той же величины — иначе корпус «нырял» бы туда-обратно.
+    leanTorso(rig, p, -cssDeg(wIn * g.lean));
   } else {
-    const sway = Math.sin((Math.PI * dist) / stride);
-    if (rig.parts.armL) p.ang.armL = (p.ang.armL ?? 0) + w * 10 * g.arms * 4 * Math.max(0, sway);
-    if (rig.parts.armR) p.ang.armR = (p.ang.armR ?? 0) - w * 10 * g.arms * 4 * Math.max(0, -sway);
-    // Переваливание с ноги на ногу — туловищем над бёдрами (корень не наклоняем: иначе опорная стопа
-    // поехала бы вместе с фигурой); ноги — дети туловища, им наклон возвращаем обратно.
-    const root = rootOf(rig), tilt = w * 3 * sway;
-    p.ang[root] = (p.ang[root] ?? 0) + tilt;
-    for (const leg of ["legL", "legR"]) if (rig.parts[leg]?.parent === root) p.ang[leg] = (p.ang[leg] ?? 0) - tilt;
+    const sway = Math.sin((Math.PI * dist) / stride), swayArm = Math.sin((Math.PI * lagged) / stride);
+    if (rig.parts.armL) p.ang.armL = (p.ang.armL ?? 0) + w * g.arms * Math.max(0, swayArm);
+    if (rig.parts.armR) p.ang.armR = (p.ang.armR ?? 0) - w * g.arms * Math.max(0, -swayArm);
+    if (rig.parts.head) p.ang.head = (p.ang.head ?? 0) + w * g.nod * Math.sin((Math.PI * lagged) / stride);
+    // Переваливание с ноги на ногу — туловищем над бёдрами.
+    leanTorso(rig, p, w * 3 * sway);
   }
-  if (rig.parts.head) p.ang.head = (p.ang.head ?? 0) - p.rot * 0.5; // голова держит горизонт
+};
+
+/** Наклон корпуса после остановки (градусы «вперёд»), u — секунды от остановки. Ноги встали, а корпус
+ *  по инерции продолжает: с наклона на ходу (lean) чуть вперёд, затем откат назад за вертикаль и
+ *  покой к ~0,65 с. Непрерывен с наклоном на ходу (settle(0) = lean). */
+export const settle = (u: number, lean: number, run: boolean) => {
+  if (u < 0 || u >= 0.65) return 0;
+  const top = lean + (run ? 3 : 2), back = -0.25 * top;
+  const ease = (x: number) => 0.5 - 0.5 * Math.cos(Math.PI * clamp(x, 0, 1));
+  if (u < 0.12) return lean + (top - lean) * Math.sin((Math.PI / 2) * (u / 0.12));
+  if (u < 0.45) return top + (back - top) * ease((u - 0.12) / 0.33);
+  return back * (1 - ease((u - 0.45) / 0.2));
 };
 
 /** Поза в момент t: покой (дыхание, моргание, лёгкое покачивание) + действия + запаздывание. */
 /** Число из строки (имя героя) — чтобы у разных героев было своё расписание моргания и дыхания. */
 const seedOf = (s: string) => { let h = 7; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) % 1000003; return h; };
 
-export const evaluate = (rig: RigDef, acts: RigAction[], t: number, o: { x: number; y: number; facing?: 1 | -1; height: number; seed?: string }) => {
+export const evaluate = (rig: RigDef, acts: RigAction[], t: number, o0: { x: number; y: number; facing?: 1 | -1; height: number; seed?: string }) => {
+  const share = legShare(rig);
+  const o = { ...o0, leg: share > 0 ? share * o0.height : undefined, view: rig.view === "side" ? "side" as const : "front" as const };
   const at = placeAt(acts, t, o);
   const p: Pose = { dx: 0, dy: 0, rot: 0, sx: 1, sy: 1, facing: at.facing, ang: {}, len: {}, scale: {}, alt: {}, off: {} };
   const has = (n: string) => Boolean(rig.parts[n]);
@@ -303,8 +415,15 @@ export const evaluate = (rig: RigDef, acts: RigAction[], t: number, o: { x: numb
 
   // Ходьба / бег: шаг от пройденного пути — опорная стопа стоит, маховая переносится (см. gait).
   const mv = at.moving;
+  // Ноги встали — корпус доигрывает по инерции (в профиль; анфас качнуться «вперёд» некуда). Если
+  // следующий переход начался, пока доигрыш не кончился, он гаснет за вход нового шага, а не обрывается.
+  if (at.stopped && at.stopped.kind !== "move" && rig.view === "side") {
+    const fade = mv ? 1 - sm((t - mv.at) / 0.3) : 1;
+    const run = at.stopped.kind === "run", s = settle(t - at.stopped.end, GAIT.side[run ? "run" : "walk"].lean, run) * fade;
+    if (s) leanTorso(rig, p, s * at.stopped.dir * at.facing);
+  }
   if (mv && mv.kind !== "move") {
-    gait(rig, p, mv, env(t, mv.at, mv.end, 0.15), H, mv.dir * at.facing);
+    gait(rig, p, mv, env(t, mv.at, mv.end, 0.15), H, mv.dir * at.facing, sm((t - mv.at) / 0.3));
   } else if (mv) {
     const w = env(t, mv.at, mv.end, 0.2);
     p.rot += w * 4 * mv.dir; p.dy -= w * 0.04 * H * Math.sin(Math.PI * clamp((t - mv.at) / (mv.end - mv.at), 0, 1));
@@ -374,14 +493,16 @@ export const evaluate = (rig: RigDef, acts: RigAction[], t: number, o: { x: numb
     }
   }
 
-  // Запаздывание: уши, хвост, волосы отстают от движения корня и покачиваются.
+  // Запаздывание: уши, хвост, волосы отстают от движения корня и покачиваются. Углы частей — в осях
+  // героя, а он при ходьбе влево отражён: скорость по экрану переводим в его оси (× facing), иначе
+  // при ходьбе влево уши клонятся вперёд, а не отстают.
   const prev = placeAt(acts, t - 0.1, o);
-  const vx = (at.x - prev.x) / 0.1 / Math.max(1, H);
+  const vx = ((at.x - prev.x) / 0.1 / Math.max(1, H)) * at.facing;
   Object.entries(rig.parts).forEach(([n, part], i) => {
     if (!part.follow) return;
     add(n, clamp(-vx * 22 * part.follow, -30, 30) + part.follow * 5 * Math.sin((TAU * t) / 1.6 + i));
   });
-  return { x: at.x, y: at.y, pose: p };
+  return { x: at.x, y: at.y, pose: p, moving: at.moving };
 };
 
 const restPose = (): Pose => ({ dx: 0, dy: 0, rot: 0, sx: 1, sy: 1, facing: 1, ang: {}, len: {}, scale: {}, alt: {}, off: {} });

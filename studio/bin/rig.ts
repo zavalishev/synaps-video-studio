@@ -5,6 +5,9 @@
 //       (роли угаданы по раскладке листа: головы — верхний ряд слева направо = head, head-blink,
 //       head-talk; самая крупная в середине — torso; слева/справа от неё — armL/armR; ниже — legL/legR;
 //       остальное — extraN) и лист частей с номерами out/rig-<name>-parts.png — открыть Read-ом.
+//   studio rig cut <лист.png> --side [--name bear]
+//       герой в профиль с коленями: внизу листа четыре части ног — бедро и голень каждой ноги;
+//       в rig.json view: "side" и shinL/shinR (шаг вразмах, колено сгибается).
 //   studio rig cut <лист.png> --object [--name bean] [--limb "#3b2416"]
 //       предмет-персонаж (зерно, круассан, зуб): на листе в ряд три версии тела с лицом — обычное,
 //       глаза закрыты, рот открыт; ручки и ножки — резиновые, рисуются кодом (hose) цветом --limb.
@@ -12,10 +15,13 @@
 //       [--out out/rig-<name>-check.png] [--joints]
 //       лист поз скелета (та же математика, что <Rig> в кадре): части на месте, суставы не рвутся,
 //       руки вверх/в стороны выглядят живо. --joints — точки суставов красным.
+//   studio rig check public/rig/<name>/rig.json --strip walk|run
+//       лента шага (кадры через один, пол с метками) и замер: шагов в секунду, в какой доле кадров
+//       опорная стопа стоит на месте, худший сдвиг — ловит скользящие ноги до рендера ролика.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import sharp from "sharp";
-import { apply, drawList, evaluate, restBounds, rootMatrix, validateRig, type RigAction, type RigDef, type RigPart, type Vec } from "../lib/rig/pose";
+import { apply, drawList, evaluate, legShare, restBounds, rootMatrix, validateRig, type RigAction, type RigDef, type RigPart, type Vec } from "../lib/rig/pose";
 import { die, ensureDir, inJob, jobDir, num, parseArgs, str } from "./_lib";
 
 const a = parseArgs(process.argv.slice(2), ["joints", "object", "side"]);
@@ -215,7 +221,8 @@ const check = async () => {
   const rig = JSON.parse(readFileSync(rigFile, "utf8")) as RigDef;
   const err = validateRig(rig);
   if (err.length) die(`скелет с ошибками:\n  ${err.join("\n  ")}`);
-  const names = (str(a, "poses", "rest,walk,walk-2,wave,hop,land,cheer,talk,surprise,sleep")!).split(",").map((s) => s.trim()).filter((s) => POSES[s]);
+  if (str(a, "strip")) return strip(rig);
+  const names =(str(a, "poses", "rest,walk,walk-2,wave,hop,land,cheer,talk,surprise,sleep")!).split(",").map((s) => s.trim()).filter((s) => POSES[s]);
   const CW = 300, CH = 420, HGT = 320, cols = Math.min(5, names.length), rows = Math.ceil(names.length / cols);
   const rest = restBounds(rig);
   const b64 = new Map<string, string>();
@@ -255,6 +262,87 @@ const check = async () => {
   console.log(`лист поз: ${out} (${names.join(", ")}) — откройте Read-ом: части на месте, суставы не рвутся, руки вверх и в стороны без «оторванных» плеч`);
 };
 
+/** Точка стопы на экране: низ голени (или ноги одной картинкой), конец резиновой ноги. */
+const footOf = (rig: RigDef, items: ReturnType<typeof drawList>, leg: "L" | "R"): Vec | null => {
+  const name = rig.parts[`shin${leg}`] ? `shin${leg}` : `leg${leg}`;
+  const it = items.find((i) => i.name === name), p = rig.parts[name];
+  if (!it || !p) return null;
+  return it.kind === "img" ? apply(it.m, [p.pivot?.[0] ?? 0, it.h * 0.94 + (p.pivot?.[1] ?? 0) * 0.06]) : apply(it.m, [0, it.len]);
+};
+
+/** Шаг по кадрам: опорная стопа должна стоять на месте относительно пола. Считает на росте 800 px
+ *  (как в кадре) долю кадров, где одна из стоп стоит (сдвиг < 1,5 px), худший кадр и шагов в секунду. */
+export const gaitStats = (rig: RigDef, kind: "walk" | "run", height = 800) => {
+  const rest = restBounds(rig), o = { x: 0, y: 0, height };
+  const acts: RigAction[] = [{ do: kind, at: 0, to: [height * 3, 0] }];
+  let end = 0;
+  while (end < 60 && evaluate(rig, acts, end, o).x !== height * 3) end += 1 / 120;
+  const feet = (t: number) => {
+    const st = evaluate(rig, acts, t, o);
+    const items = drawList(rig, st.pose, rootMatrix(rig, rest, st.x, st.y, height, st.pose));
+    return [footOf(rig, items, "L"), footOf(rig, items, "R")].filter(Boolean) as Vec[];
+  };
+  const fps = 30, still = [true, true];
+  let plants = 0, calm = 0, n = 0, worst = 0;
+  for (let f = 0; f < end * fps; f++) {
+    const p = feet(f / fps), q = feet((f + 1) / fps);
+    if (p.length < 2 || q.length < 2) break;
+    const d = p.map((v, i) => Math.abs(q[i][0] - v[0]));
+    d.forEach((v, i) => { const s = v < 1.5; if (s && !still[i]) plants++; still[i] = s; });
+    const m = Math.min(...d);
+    n++; if (m < 1.5) calm++; worst = Math.max(worst, m);
+  }
+  return { dur: end, steps: plants / Math.max(1e-6, end), calm: n ? calm / n : 0, worst };
+};
+
+/** Лента шага: кадры через один за первые ~1,3 с ходьбы, пол с метками едет вместе с землёй —
+ *  опорная стопа должна стоять на своей метке; красные точки — стопы. */
+const strip = async (rig: RigDef) => {
+  const kind = str(a, "strip") === "run" ? "run" : "walk";
+  if (!(legShare(rig) > 0)) { console.log("у скелета нет ног (legL/legR) — шагать нечем, ленту шага не строю; такой герой перемещается move"); return; }
+  const CW = 200, CH = 330, HGT = 250, cols = 10, count = 20;
+  const rest = restBounds(rig);
+  const acts: RigAction[] = [{ do: kind, at: 0.1, to: [HGT * 6, 0] }];
+  const b64 = new Map<string, string>();
+  const href = (src: string) => {
+    if (!b64.has(src)) {
+      const f = inJob(dir, join("public", src));
+      if (!existsSync(f)) die(`нет картинки части ${src}`);
+      b64.set(src, `data:image/png;base64,${readFileSync(f).toString("base64")}`);
+    }
+    return b64.get(src)!;
+  };
+  let body = "";
+  for (let i = 0; i < count; i++) {
+    const t = 0.1 + (i * 2) / 30, ox = (i % cols) * CW, oy = Math.floor(i / cols) * CH;
+    const gx = ox + CW / 2, gy = oy + CH - 30;
+    const st = evaluate(rig, acts, t, { x: 0, y: 0, height: HGT });
+    const shift = gx - st.x; // герой в середине клетки, пол едет под ним
+    const items = drawList(rig, st.pose, rootMatrix(rig, rest, st.x + shift, gy, HGT, st.pose));
+    body += `<rect x="${ox + 1}" y="${oy + 1}" width="${CW - 2}" height="${CH - 2}" fill="${i % 2 ? "#e9e4da" : "#dfe6ea"}"/><line x1="${ox}" y1="${gy}" x2="${ox + CW}" y2="${gy}" stroke="#888"/>`;
+    // Метки пола через 40 px мира: в клетке они сдвинуты вместе с землёй.
+    for (let n = Math.ceil((ox - shift) / 40); n * 40 + shift < ox + CW; n++) {
+      const x = n * 40 + shift;
+      body += `<line x1="${x}" y1="${gy}" x2="${x}" y2="${gy + 10}" stroke="#666" stroke-width="2"/>`;
+    }
+    for (const it of items) {
+      const m = it.m.map((v) => v.toFixed(4)).join(" ");
+      if (it.kind === "img") body += `<image href="${href(it.src)}" width="${it.w}" height="${it.h}" transform="matrix(${m})"/>`;
+      else body += `<g transform="matrix(${m})"><path d="${it.d}" fill="none" stroke="${it.color}" stroke-width="${it.width}" stroke-linecap="round"/></g>`;
+    }
+    for (const leg of ["L", "R"] as const) { const f = footOf(rig, items, leg); if (f) body += `<circle cx="${f[0]}" cy="${f[1]}" r="4" fill="#e11" stroke="#fff" stroke-width="1.5"/>`; }
+    body += `<text x="${ox + 8}" y="${oy + 20}" font-family="sans-serif" font-size="15" font-weight="700" fill="#333">${t.toFixed(2)} с</text>`;
+  }
+  const W = cols * CW, H = Math.ceil(count / cols) * CH;
+  const out = inJob(dir, str(a, "out", `out/rig-${rig.name ?? "hero"}-${kind}-strip.png`)!);
+  ensureDir(dirname(out));
+  await sharp(Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">${body}</svg>`)).png().toFile(out);
+  const s = gaitStats(rig, kind);
+  console.log(`лента шага (${kind}): ${out} — откройте Read-ом: опорная стопа (красная точка) стоит на своей метке пола, маховая переносится над полом`);
+  console.log(`шагов в секунду ${s.steps.toFixed(1)}; опорная стопа стоит в ${Math.round(s.calm * 100)} % кадров, худший сдвиг ${s.worst.toFixed(1)} px при росте 800${s.calm < 0.8 || s.worst > (kind === "run" ? 8 : 4) ? " — ВНИМАНИЕ: стопа едет по полу; проверьте at/pivot ног и голени (колено = точка крепления голени)" : ""}`);
+  if (rig.view !== "side") console.log("герой анфас: при движении вбок — приставной шаг (годится на 1–2 шага); через кадр пусть идёт лист в профиль (--side)");
+};
+
 if (sub === "cut") cut().catch((e) => die(String(e?.message ?? e)));
 else if (sub === "check") check().catch((e) => die(String(e?.message ?? e)));
-else die("studio rig cut <лист.png> [--name x] | studio rig check public/rig/<x>/rig.json [--poses …] [--joints]");
+else die("studio rig cut <лист.png> [--name x] [--side|--object] | studio rig check public/rig/<x>/rig.json [--poses …] [--joints] [--strip walk|run]");

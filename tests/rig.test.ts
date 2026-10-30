@@ -104,7 +104,9 @@ describe("скелет", () => {
       const rest = restBounds(r);
       const acts = [{ do: "walk" as const, at: 0.5, to: [tx, 1600] as [number, number] }];
       const o = { x: 500, y: 1600, height: 800 };
-      const end = 0.5 + Math.max(0.5, (tx - 500) / (0.6 * 800));
+      // Конец пути — первый кадр, где герой уже в цели (скорость считается от длины ноги).
+      let end = 0.5;
+      while (end < 30 && evaluate(r, acts, end, o).x !== tx) end += 1 / 120;
       const feet = (t: number) => {
         const st = evaluate(r, acts, t, o);
         const items = drawList(r, st.pose, rootMatrix(r, rest, st.x, st.y, 800, st.pose));
@@ -134,6 +136,106 @@ describe("скелет", () => {
       const gap = (t: number) => { const [l, rr] = feet(t); return l[0] - rr[0]; };
       expect(Math.abs(gap(end + 0.6) - gap(0.2)), `${label}: стопы как в покое`).toBeLessThan(0.02 * 800);
     }
+  });
+
+  it("в профиль — короткий частый шаг: ~1,6–1,8 шага в секунду, шаг ~0,7 ноги, руки отстают, бёдра качаются по шагу, корпус доигрывает", () => {
+    const shin = { src: "s.png", w: 30, h: 60, pivot: [15, 4] as [number, number] };
+    const r: RigDef = { ...rig, view: "side", parts: { ...rig.parts, legL: { ...rig.parts.legL, h: 50 }, legR: { ...rig.parts.legR, h: 50 },
+      shinL: { ...shin, parent: "legL", at: [17, 46] }, shinR: { ...shin, parent: "legR", at: [17, 46] } } };
+    const o = { x: 500, y: 1600, height: 800 };
+    const acts = [{ do: "walk" as const, at: 0, to: [2500, 1600] as [number, number] }];
+    let end = 0;
+    while (evaluate(r, acts, end, o).x !== 2500) end += 1 / 120;
+    // Постановки стопы — стопа на экране перестала двигаться (была в переносе, встала на пол).
+    const fps = 30, N = Math.floor(end * fps), rest = restBounds(r);
+    const feet = (t: number) => {
+      const st = evaluate(r, acts, t, o);
+      const items = drawList(r, st.pose, rootMatrix(r, rest, st.x, st.y, 800, st.pose));
+      return (["shinL", "shinR"] as const).map((n) => { const it = items.find((i) => i.name === n)!; return apply(it.m, [15, 60 * 0.94 + 4 * 0.06])[0]; });
+    };
+    let contacts = 0;
+    const still = [true, true], plantF: number[] = [];
+    for (let f = 0; f < N; f++) {
+      const a = feet(f / fps), b = feet((f + 1) / fps);
+      [0, 1].forEach((i) => { const s = Math.abs(b[i] - a[i]) < 1.5; if (s && !still[i]) { contacts++; plantF.push(f); } still[i] = s; });
+    }
+    const steps = contacts / end;
+    expect(steps, "шагов в секунду").toBeGreaterThan(1.4);
+    expect(steps, "шагов в секунду").toBeLessThan(2.2);
+    // Длина шага в длинах ноги: путь / число шагов.
+    const L = 0.94 * (50 - 8) + 0.94 * (60 - 4), restH = restBounds(r).h, legPx = (L / restH) * 800;
+    expect(2000 / contacts / legPx).toBeGreaterThan(0.55);
+    expect(2000 / contacts / legPx).toBeLessThan(0.9);
+    // Рука отстаёт от противоположной ноги на 2–3 кадра: крайнее положение руки позже крайнего положения ноги.
+    const series = (n: string) => Array.from({ length: N }, (_, f) => evaluate(r, acts, f / fps, o).pose.ang[n] ?? 0);
+    // Левая рука идёт вместе с правой ногой (противоположной) — сдвиг, при котором кривые совпадают лучше всего.
+    const legS = series("legR"), armS = series("armL");
+    const mid = Math.floor(N / 2) - 30, win = 60;
+    const mean = (s: number[]) => s.slice(mid - 12, mid + win + 12).reduce((x, y) => x + y, 0) / (win + 24);
+    const ml = mean(legS), ma = mean(armS);
+    let lagF = 0, best = -Infinity;
+    for (let s = -10; s <= 10; s++) {
+      let c = 0;
+      for (let f = mid; f < mid + win; f++) c += (armS[f] - ma) * (legS[f - s] - ml);
+      if (c > best) { best = c; lagF = s; }
+    }
+    expect(Math.max(...armS.slice(mid, mid + win)) - Math.min(...armS.slice(mid, mid + win)), "размах руки").toBeGreaterThan(30);
+    expect(lagF, "запаздывание руки, кадров").toBeGreaterThanOrEqual(1);
+    expect(lagF, "запаздывание руки, кадров").toBeLessThanOrEqual(4);
+    // Бёдра ниже всего на постановке стопы (нога дальше всего вынесена) и заметно поднимаются над стопой.
+    const dyS = Array.from({ length: N + 8 }, (_, f) => evaluate(r, acts, f / fps, o).pose.dy);
+    const offs = plantF.filter((f) => f > 0.3 * N && f < 0.7 * N).map((c) => {
+      let b = c - 3; for (let f = c - 3; f <= c + 3; f++) if (dyS[f] > dyS[b]) b = f; return b - c;
+    });
+    expect(offs.length).toBeGreaterThan(2);
+    expect(Math.max(...offs.map(Math.abs)), "бёдра ниже всего у постановки, кадров").toBeLessThanOrEqual(2);
+    expect(Math.max(...dyS.slice(mid, mid + 20)) - Math.min(...dyS.slice(mid, mid + 20)), "качание бёдер, px").toBeGreaterThan(3);
+    // Доигрыш: через ~0,1 с после остановки корпус наклонён вперёд, через 0,7 с — снова как в покое.
+    const torso = (t: number) => evaluate(r, acts, t, o).pose.ang.torso ?? 0;
+    expect(torso(end + 0.11), "корпус по инерции вперёд").toBeGreaterThan(2);
+    expect(Math.abs(torso(end + 0.7)), "корпус успокоился").toBeLessThan(0.01);
+  });
+
+  it("ходьба без телепортов: цепочка walk внахлёст, по диагонали, после бега; герой без ног не дёргается", () => {
+    const shin = { src: "s.png", w: 30, h: 60, pivot: [15, 4] as [number, number] };
+    const side: RigDef = { ...rig, view: "side", parts: { ...rig.parts, legL: { ...rig.parts.legL, h: 50 }, legR: { ...rig.parts.legR, h: 50 },
+      shinL: { ...shin, parent: "legL", at: [17, 46] }, shinR: { ...shin, parent: "legR", at: [17, 46] } } };
+    const o = { x: 500, y: 1600, height: 800 };
+    const maxStep = (r: RigDef, acts: Parameters<typeof evaluate>[1], from: number, to: number, f: (s: ReturnType<typeof evaluate>) => number) => {
+      let m = 0;
+      for (let t = from; t < to; t += 1 / 30) m = Math.max(m, Math.abs(f(evaluate(r, acts, t + 1 / 30, o)) - f(evaluate(r, acts, t, o))));
+      return m;
+    };
+    // Второй walk назначен раньше, чем кончится первый: герой доходит и идёт дальше, не перескакивая.
+    const chain = [{ do: "walk" as const, at: 0, to: [1100, 1600] as [number, number] }, { do: "walk" as const, at: 1, to: [1800, 1600] as [number, number] }];
+    for (const r of [side, { ...rig, view: "front" as const }]) expect(maxStep(r, chain, 0, 8, (s) => s.x), `${r.view}: шаг корня за кадр`).toBeLessThan(0.05 * 800);
+    // Добежал — сразу пошёл дальше: корпус не обрывает доигрыш скачком.
+    let runEnd = 0; const run1 = [{ do: "run" as const, at: 0, to: [1500, 1600] as [number, number] }];
+    while (evaluate(side, run1, runEnd, o).x !== 1500) runEnd += 1 / 120;
+    const runWalk = [...run1, { do: "walk" as const, at: runEnd + 0.12, to: [2200, 1600] as [number, number] }];
+    expect(maxStep(side, runWalk, runEnd - 0.2, runEnd + 0.6, (s) => s.pose.ang.torso ?? 0), "скачок корпуса, градусов за кадр").toBeLessThan(2.5);
+    // По диагонали опорная стопа стоит, как и по прямой.
+    const rest = restBounds(side), diag = [{ do: "walk" as const, at: 0, to: [1700, 1100] as [number, number] }];
+    const foot = (t: number) => { const st = evaluate(side, diag, t, o); const items = drawList(side, st.pose, rootMatrix(side, rest, st.x, st.y, 800, st.pose));
+      return (["shinL", "shinR"] as const).map((n) => apply(items.find((i) => i.name === n)!.m, [15, 60 * 0.94 + 4 * 0.06])); };
+    const mins: number[] = [];
+    for (let t = 0.8; t < 2; t += 1 / 30) { const a = foot(t), b = foot(t + 1 / 30); mins.push(Math.min(...a.map((q, i) => Math.abs(b[i][0] - q[0])))); }
+    expect(mins.filter((v) => v < 1.5).length / mins.length, "по диагонали: доля кадров без скольжения").toBeGreaterThan(0.8);
+    // Герой без ног (призрак, бюст с руками): руки при ходьбе качаются плавно, а не дёргаются.
+    const legless: RigDef = { name: "g", view: "side", parts: { torso: rig.parts.torso, head: rig.parts.head, armL: rig.parts.armL, armR: rig.parts.armR } };
+    const walk = [{ do: "walk" as const, at: 0, to: [2500, 1600] as [number, number] }];
+    expect(maxStep(legless, walk, 1, 2, (s) => s.pose.ang.armL ?? 0), "рука без ног, градусов за кадр").toBeLessThan(5);
+  });
+
+  it("уши и хвост отстают от движения и при ходьбе влево (герой отражён)", () => {
+    const o = { x: 1000, y: 0, height: 800 };
+    // Угол уха на экране: в осях героя × facing (отражение меняет направление поворота).
+    const r: RigDef = { ...rig, parts: { ...rig.parts, ear: { ...rig.parts.ear, follow: 1 } } };
+    const screen = (to: number) => { const s = evaluate(r, [{ do: "run", at: 0, to: [to, 0] }], 1, o); return (s.pose.ang.ear ?? 0) * s.pose.facing; };
+    const right = screen(2500), left = screen(-500);
+    // Вправо — ухо отстаёт влево (против часовой, угол < 0); влево — зеркально.
+    expect(right).toBeLessThan(-3);
+    expect(left).toBeGreaterThan(3);
   });
 
   it("два героя моргают и дышат не синхронно; в профиль машет ближняя рука", () => {
