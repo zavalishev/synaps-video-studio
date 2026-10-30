@@ -6,7 +6,7 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import sharp from "sharp";
-import { apply, drawList, evaluate, placeAt, restBounds, rootMatrix, talkFromWords, validateRig, type RigDef } from "../studio/lib/rig/pose";
+import { apply, drawList, evaluate, handAt, placeAt, restBounds, rootMatrix, talkFromWords, validateRig, type RigDef } from "../studio/lib/rig/pose";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -225,6 +225,32 @@ describe("скелет", () => {
     const legless: RigDef = { name: "g", view: "side", parts: { torso: rig.parts.torso, head: rig.parts.head, armL: rig.parts.armL, armR: rig.parts.armR } };
     const walk = [{ do: "walk" as const, at: 0, to: [2500, 1600] as [number, number] }];
     expect(maxStep(legless, walk, 1, 2, (s) => s.pose.ang.armL ?? 0), "рука без ног, градусов за кадр").toBeLessThan(5);
+  });
+
+  it("reach: рука поворачивается к точке вокруг своего плеча, длина не меняется; руки двух героев встречаются", () => {
+    const o = { x: 500, y: 1600, height: 800 };
+    const restLen = handAt(rig, [], 0.01, o, "R")!.length;
+    const ang = (v: number[]) => (Math.atan2(v[1], v[0]) * 180) / Math.PI;
+    for (const facing of [1, -1] as const) for (const arm of ["L", "R"] as const) for (const to of [[900, 1000], [100, 900], [520, 500], [700, 1500]] as [number, number][]) {
+      const acts = [{ do: "reach" as const, at: 0, dur: 2, arm, to }];
+      const h = handAt(rig, acts, 1, { ...o, facing }, arm)!;
+      const want = ang([to[0] - h.shoulder[0], to[1] - h.shoulder[1]]), got = ang([h.hand[0] - h.shoulder[0], h.hand[1] - h.shoulder[1]]);
+      const d = Math.abs(((want - got + 540) % 360) - 180);
+      expect(d, `facing ${facing} arm ${arm} → ${to}`).toBeLessThan(2);
+      expect(Math.abs(h.length - restLen) / restLen, "длина руки та же (±дыхание)").toBeLessThan(0.04);
+    }
+    // Двое берутся за руки: каждый тянется к общей точке между ними — кисти сходятся.
+    const a = { x: 400, y: 1600, height: 800 }, b = { x: 760, y: 1600, height: 640, facing: -1 as const };
+    const sa = handAt(rig, [], 0.01, a, "R")!.shoulder, sb = handAt(rig, [], 0.01, b, "R")!.shoulder;
+    const meet: [number, number] = [(sa[0] + sb[0]) / 2, Math.max(sa[1], sb[1]) + 0.5 * restLen];
+    const ha = handAt(rig, [{ do: "reach", at: 0, dur: 3, arm: "R", to: meet }], 1.5, a, "R")!;
+    const hb = handAt(rig, [{ do: "reach", at: 0, dur: 3, arm: "R", to: meet }], 1.5, b, "R")!;
+    expect(Math.hypot(ha.hand[0] - hb.hand[0], ha.hand[1] - hb.hand[1]), "кисти рядом").toBeLessThan(0.35 * restLen);
+    // Вход и выход плавные: за кадр рука поворачивается не больше чем на ~15°.
+    const acts = [{ do: "reach" as const, at: 0.5, dur: 1.5, arm: "R" as const, to: [100, 700] as [number, number] }];
+    let jump = 0;
+    for (let t = 0; t < 2.6; t += 1 / 30) jump = Math.max(jump, Math.abs((evaluate(rig, acts, t + 1 / 30, o).pose.ang.armR ?? 0) - (evaluate(rig, acts, t, o).pose.ang.armR ?? 0)));
+    expect(jump, "градусов за кадр").toBeLessThan(15);
   });
 
   it("уши и хвост отстают от движения и при ходьбе влево (герой отражён)", () => {

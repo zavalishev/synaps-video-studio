@@ -80,6 +80,11 @@ export const lintJob = (dir: string): LintIssue[] => {
       const idx = src.search(/(toFixed|toLocaleString|NumberFormat)\s*\(/);
       if (idx >= 0) push("WARN", "number-jitter", idx, "число считается по кадрам без font-variant-numeric: tabular-nums — строка дрожит по ширине (Counter из @studio/kinetic-typography)");
     }
+    // 7) Части героя в обход <Rig>: сцена вырезает руки/ноги из скелета или рисует их картинки своими
+    // <Img>/матрицами. Растянутая до цели картинка руки сплющивается и «отрывается» (ролик 77386).
+    for (const m of src.matchAll(/Object\.entries\([^)]*\.parts\)\s*\.filter\s*\(|\.parts\[[^\]]+\][^;\n]{0,60}\.src\b|\.parts\.(?:arm|leg|shin|forearm)[LR]\??\.src\b/g)) {
+      push("WARN", "rig-parts-bypass", m.index!, "части героя рисуются в обход <Rig> (вырезаны из скелета или своей картинкой) — растянутая рука сплющивается и «отрывается»; взять за руку, протянуть, держать предмет — действие reach {arm, to:[x,y]}, предмет в руке — handAt(…).hand");
+    }
     // 6) Слой шире кадра от left без страховки.
     for (const m of src.matchAll(/width\s*:\s*(W|width)\s*\*\s*([\d.]+)/g)) {
       if (Number(m[2]) > 1.02 && !/CoverImage|coverRect|kenBurns|CameraView|useGuardedBox|Guarded|data-bleed/.test(src)) push("WARN", "wide-layer", m.index!, `слой шириной ${m[2]}×кадра без CoverImage/coverRect/CameraView — при сдвиге откроется край`);

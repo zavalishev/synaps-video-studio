@@ -53,7 +53,10 @@ export type RigAction =
   | { do: "talk"; at: number; dur?: number; beats?: [number, number, number][] }
   | { do: "look"; at: number; dur?: number; angle: number }
   | { do: "turn"; at: number; facing: 1 | -1 }
-  | { do: "pose"; at: number; dur?: number; ease?: number; angles?: Record<string, number>; lean?: number; dy?: number; alt?: Record<string, string> };
+  | { do: "pose"; at: number; dur?: number; ease?: number; angles?: Record<string, number>; lean?: number; dy?: number; alt?: Record<string, string> }
+  /** Тянуться рукой к точке кадра (x, y — пиксели кадра): взять за руку, протянуть, держать предмет.
+   *  Рука поворачивается к цели, длина не меняется (дальше руки — просто указывает в ту сторону). */
+  | { do: "reach"; at: number; dur?: number; ease?: number; arm?: Side; to: Vec };
 
 export type Pose = {
   dx: number; dy: number; rot: number; sx: number; sy: number; facing: 1 | -1;
@@ -114,7 +117,7 @@ const TAU = Math.PI * 2;
 const side = (name: string) => (/L$/.test(name) ? 1 : -1);
 const LIMB = /^(arm|leg)[LR]$/;
 
-const DUR: Record<string, number> = { hop: 0.95, wave: 1.6, point: 1.5, cheer: 1.4, talk: 1.5, sleep: 2, nod: 0.8, shiver: 1.2, surprise: 0.8, look: 1.2, pose: 1.2 };
+const DUR: Record<string, number> = { hop: 0.95, wave: 1.6, point: 1.5, cheer: 1.4, talk: 1.5, sleep: 2, nod: 0.8, shiver: 1.2, surprise: 0.8, look: 1.2, pose: 1.2, reach: 1.5 };
 export const actionEnd = (a: RigAction): number => (a.do === "turn" ? a.at : a.at + ("dur" in a && a.dur ? a.dur : DUR[a.do] ?? 1));
 
 /** dist — сколько пройдено от начала перехода (пиксели кадра): по нему, а не по часам, считается шаг.
@@ -490,7 +493,47 @@ export const evaluate = (rig: RigDef, acts: RigAction[], t: number, o0: { x: num
     if (!part.follow) return;
     add(n, clamp(-vx * 22 * part.follow, -30, 30) + part.follow * 5 * Math.sin((TAU * t) / 1.6 + i));
   });
+  // Тянуться к точке: после всех остальных движений — рука поворачивается к цели вокруг своего плеча
+  // (в осях родителя: учтены наклон, отражение и рост героя), длина руки не меняется.
+  const reaches = acts.filter((a): a is Extract<RigAction, { do: "reach" }> => a.do === "reach" && t >= a.at && t <= actionEnd(a) + 0.4);
+  if (reaches.length) {
+    const rest = restBounds(rig);
+    for (const a of reaches) {
+      const arm = `arm${a.arm ?? nearArm}`, part = rig.parts[arm];
+      const w = env(t, a.at, actionEnd(a), a.ease ?? 0.5);
+      if (!part || !part.parent || w <= 0) continue;
+      const items = drawList(rig, p, rootMatrix(rig, rest, at.x, at.y, H, p));
+      const parent = items.find((i) => i.name === part.parent);
+      if (!parent) continue;
+      const pm = parent.kind === "hose" ? mul(parent.m, T(0, parent.len)) : parent.m;
+      const off = p.off[arm] ?? [0, 0];
+      const sh = apply(pm, [(part.at?.[0] ?? 0) + off[0], (part.at?.[1] ?? 0) + off[1]]);
+      const dx = a.to[0] - sh[0], dy = a.to[1] - sh[1];
+      if (Math.hypot(dx, dy) < 1) continue;
+      // Вектор к цели — в оси родителя (обратная линейная часть его матрицы).
+      const det = pm[0] * pm[3] - pm[1] * pm[2];
+      if (Math.abs(det) < 1e-9) continue;
+      const vx = (pm[3] * dx - pm[2] * dy) / det, vy = (-pm[1] * dx + pm[0] * dy) / det;
+      // Рука висит вниз (+y своей картинки); R(θ)·(0,1) = (−sin θ, cos θ) → θ = atan2(−vx, vy).
+      const want = (Math.atan2(-vx, vy) * 180) / Math.PI - (part.rest ?? 0);
+      const cur = p.ang[arm] ?? 0;
+      const diff = ((((want - cur) % 360) + 540) % 360) - 180; // кратчайший поворот
+      p.ang[arm] = cur + w * diff;
+    }
+  }
   return { x: at.x, y: at.y, pose: p, moving: at.moving };
+};
+
+/** Где кисть и плечо руки героя в момент t (пиксели кадра) и длина руки — чтобы положить в руку
+ *  предмет (покебол, чашку) или выбрать точку, до которой герой дотянется (reach). */
+export const handAt = (rig: RigDef, acts: RigAction[], t: number, o: { x: number; y: number; facing?: 1 | -1; height: number; seed?: string }, arm: Side) => {
+  const st = evaluate(rig, acts, t, o);
+  const items = drawList(rig, st.pose, rootMatrix(rig, restBounds(rig), st.x, st.y, o.height, st.pose));
+  const name = `arm${arm}`, it = items.find((i) => i.name === name), part = rig.parts[name];
+  if (!it || !part) return null;
+  const sh = it.kind === "img" ? apply(it.m, part.pivot ?? [0, 0]) : apply(it.m, [0, 0]);
+  const hand = it.kind === "img" ? apply(it.m, [part.pivot?.[0] ?? (part.w ?? 0) / 2, (part.h ?? 0) * 0.94]) : apply(it.m, [0, it.len]);
+  return { shoulder: sh, hand, length: Math.hypot(hand[0] - sh[0], hand[1] - sh[1]) };
 };
 
 const restPose = (): Pose => ({ dx: 0, dy: 0, rot: 0, sx: 1, sy: 1, facing: 1, ang: {}, len: {}, scale: {}, alt: {}, off: {} });
