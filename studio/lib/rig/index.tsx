@@ -47,7 +47,7 @@ export const Rig: React.FC<RigProps> = ({ rig, x, y, height, facing = 1, actions
   const items = drawList(rig, st.pose, rootMatrix(rig, rest, st.x, st.y, height, st.pose));
   const bb = bounds(items);
   const lift = Math.max(0, -st.pose.dy) / height;
-  // Анфас вбок герой переступает приставным шагом: подход до роста — живо, дальше — «шарканье».
+  // Анфас вбок герой семенит мелкими шажками под телом: подход до роста — живо, дальше — «шарканье».
   // Пометка для самопроверки (длина пути в ростах), сама картинка от неё не меняется. Без ног — не шагает.
   const mv = st.moving;
   const shuffle = rig.view !== "side" && legShare(rig) > 0 && mv && mv.kind !== "move" && mv.len * mv.hx > height ? ((mv.len * mv.hx) / height).toFixed(1) : "";

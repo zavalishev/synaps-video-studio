@@ -341,10 +341,10 @@ const analyzeGuard = (guard: GuardHit[], fps: number, briefNums: Set<number>) =>
       issues.push({ level: "WARN", source: "guard", kind: "fact-unreadable", id: g.id, frames: [g.frames[0], g.frames[g.frames.length - 1]], msg: `«${g.id}»: число брифа ${g.worst} ${(g.frames.length / fps).toFixed(1)} с показывает промежуточные значения — факт заказчика читается с первого кадра. Прокрутка — для счётчика роста, не для цены/зарплаты/даты: RollNumber turns=0 (крутятся только младшие разряды), scaleStep или maskReveal` });
       continue;
     }
-    // Герой анфас идёт через кадр — приставной шаг дольше пары шагов читается как шарканье влево-вправо.
+    // Герой анфас идёт через кадр — мелкие шажки вбок на длинном пути читаются как шарканье влево-вправо.
     if (g.kind === "note:rig-shuffle") {
       const r = runs(g.frames).reduce((m, x) => (x[1] - x[0] > m[1] - m[0] ? x : m), [0, -1] as [number, number]);
-      if (r[1] >= r[0]) issues.push({ level: "WARN", source: "guard", kind: "rig-front-walk", frames: r, msg: `герой анфас идёт вбок дальше своего роста (${((r[1] - r[0] + 1) / fps).toFixed(1)} с) — приставной шаг на длинном пути читается как «шарканье влево-вправо». Через кадр — лист в профиль (studio rig cut --side); анфас — подход до роста, «к зрителю» сменой плана или move` });
+      if (r[1] >= r[0]) issues.push({ level: "WARN", source: "guard", kind: "rig-front-walk", frames: r, msg: `герой анфас идёт вбок дальше своего роста (${((r[1] - r[0] + 1) / fps).toFixed(1)} с) — мелкие шажки анфас на длинном пути читаются как «шарканье влево-вправо». Через кадр — лист в профиль (studio rig cut --side); анфас — подход до роста, «к зрителю» сменой плана или move` });
       continue;
     }
     if (g.kind.startsWith("note:")) continue;

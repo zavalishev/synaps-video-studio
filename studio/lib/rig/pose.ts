@@ -247,11 +247,12 @@ const GAIT: Record<"front" | "side", Record<"walk" | "run", Gait>> = {
     walk: { stride: 0.7, v0: 1.1, min: 0.6, max: 0.9, lift: 0.08, arms: 20, lean: 5, nod: 3 },
     run: { stride: 1.0, v0: 2.7, min: 0.8, max: 1.3, lift: 0.22, arms: 36, lean: 11, nod: 4 },
   },
-  // Анфас при ходьбе вбок — приставной шаг: полцикла шага (ведущая шагает на 2·stride, вторая
-  // подтягивается), нога поднимается выше, корпус переваливается. stride — полцикла.
+  // Анфас при ходьбе вбок — как у мультяшных героев анфас (чашка Lemo, Clawd): ноги переступают под
+  // телом поочерёдно, каждая стопа уходит от своего места лишь на полшага — ноги не расходятся
+  // «циркулем». Шаг короткий и частый, стопа поднимается заметно, корпус переваливается.
   front: {
-    walk: { stride: 0.38, v0: 1.1, min: 0.25, max: 0.5, lift: 0.16, arms: 10, lean: 0, nod: 2 },
-    run: { stride: 0.45, v0: 2.4, min: 0.3, max: 0.6, lift: 0.24, arms: 16, lean: 0, nod: 3 },
+    walk: { stride: 0.3, v0: 1.1, min: 0.2, max: 0.45, lift: 0.14, arms: 10, lean: 0, nod: 2 },
+    run: { stride: 0.45, v0: 2.4, min: 0.3, max: 0.6, lift: 0.2, arms: 16, lean: 0, nod: 3 },
   },
 };
 
@@ -270,16 +271,15 @@ const gait = (rig: RigDef, p: Pose, mv: Moving, w: number, H: number, localDir: 
   const share = legShare(rig), Lg = (share > 0 ? share : 0.45) * restH;
   // Средняя скорость перехода (пиксели скелета в секунду) — от неё длина шага (∝ √скорости).
   const v = len / Math.max(0.05, mv.end - mv.at);
-  const want = Lg * (g.v0 > 0 ? clamp(g.stride * Math.sqrt(v / (g.v0 * Lg)), g.min, g.max) : g.stride);
-  // Шаг подгоняется под путь: в профиль стопы стоят вместе через каждые stride пути, анфас — через
-  // каждый цикл 2·stride. Целое число таких отрезков = герой трогается и останавливается со стопами
-  // вместе, без доводки ноги «по полу» в последний момент.
-  const unit = (view === "side" ? 1 : 2) * want;
-  const stride = (len > 1e-6 ? len / Math.max(1, Math.round(len / unit)) : unit) / (view === "side" ? 1 : 2);
+  let want = Lg * (g.v0 > 0 ? clamp(g.stride * Math.sqrt(v / (g.v0 * Lg)), g.min, g.max) : g.stride);
+  // Анфас стопы ходят рядом: шаг не больше 0,7 расстояния между ногами — иначе одна стопа заходит
+  // за другую (ноги перекрещиваются). Близко поставленные ноги семенят мелко и часто.
+  const gap = Math.abs((rig.parts.legR?.at?.[0] ?? 0) - (rig.parts.legL?.at?.[0] ?? 0));
+  if (view === "front" && gap > 0) want = Math.min(want, 0.7 * gap);
+  // Шаг подгоняется под путь: стопы стоят на своих местах через каждые stride пути. Целое число шагов =
+  // герой трогается и останавливается со стопами как в покое, без доводки ноги «по полу» в конце.
+  const stride = len > 1e-6 ? len / Math.max(1, Math.round(len / want)) : want;
   const cssDeg = (forward: number) => -forward * localDir; // «вперёд» → угол CSS (по часовой)
-  // Анфас: ведущая нога — та, что со стороны движения (по точке крепления к туловищу).
-  const lx = rig.parts.legL?.at?.[0] ?? 0, rx = rig.parts.legR?.at?.[0] ?? 0;
-  const lead = (rx - lx) * localDir >= 0 ? "legR" : "legL";
   type LegState = { leg: "legL" | "legR"; shinName: string; shin?: RigPart; l1: number; l2: number; L: number; fx: number; up: number; planted: boolean; c: number; hip: number };
   const legs: LegState[] = [];
   for (const [leg, ph0] of [["legL", 0], ["legR", 0.5]] as const) {
@@ -288,29 +288,17 @@ const gait = (rig: RigDef, p: Pose, mv: Moving, w: number, H: number, localDir: 
     const shinName = leg === "legL" ? "shinL" : "shinR", shin = rig.parts[shinName];
     const l1 = thighLen(thigh, shin), l2 = shin ? segLen(shin) : 0, L = l1 + l2;
     let fx: number, up = 0, planted: boolean, c: number;
-    if (view === "side") {
-      // +0,25: в начале пути опорная стопа под бедром, маховая рядом с ней (стопы вместе).
-      c = (((dist / (2 * stride) + ph0 + 0.25) % 1) + 1) % 1;
-      planted = c < 0.5;
-      if (planted) fx = stride / 2 - (c / 0.5) * stride; // опора: стопа на месте, тело уходит вперёд
-      else {
-        // Перенос: кривая Эрмита со скоростью −1 по краям — в момент отрыва и постановки стопа
-        // неподвижна относительно земли (иначе нога «приземляется на ходу» и скользит).
-        const u = (c - 0.5) / 0.5;
-        fx = -stride / 2 + stride * (-4 * u * u * u + 6 * u * u - u);
-        up = g.lift * L * Math.sin(Math.PI * u) ** 1.5;
-      }
-    } else {
-      // Приставной шаг: за цикл (путь 2·stride) ведущая нога шагает в сторону, затем вторая
-      // подтягивается к ней. Стопы не скрещиваются; опорная стоит, пока переносится другая.
-      const D = 2 * stride, cc = (((dist / D) % 1) + 1) % 1, body = cc * D;
-      const isLead = leg === lead;
-      const moving = isLead ? cc < 0.5 : cc >= 0.5, u = isLead ? cc / 0.5 : (cc - 0.5) / 0.5;
-      planted = !moving;
-      c = moving ? 0.5 + u / 2 : 0;
-      const foot = isLead ? (moving ? D * sm(u) : D) : (moving ? D * sm(u) : 0);
-      fx = foot - body;
-      if (moving) up = g.lift * L * Math.sin(Math.PI * u);
+    // Профиль и анфас шагают одинаково: ноги поочерёдно, у каждой стопы своё место (в профиль — под
+    // бедром, анфас — на ширине бёдер). +0,25: в начале пути стопы на своих местах.
+    c = (((dist / (2 * stride) + ph0 + 0.25) % 1) + 1) % 1;
+    planted = c < 0.5;
+    if (planted) fx = stride / 2 - (c / 0.5) * stride; // опора: стопа на месте, тело уходит вперёд
+    else {
+      // Перенос: кривая Эрмита со скоростью −1 по краям — в момент отрыва и постановки стопа
+      // неподвижна относительно земли (иначе нога «приземляется на ходу» и скользит).
+      const u = (c - 0.5) / 0.5;
+      fx = -stride / 2 + stride * (-4 * u * u * u + 6 * u * u - u);
+      up = g.lift * L * Math.sin(Math.PI * u) ** (view === "side" ? 1.5 : 1);
     }
     // Положение стопы НЕ умножаем на плавный вход w: иначе опорная стопа едет по полу на старте
     // и на остановке. Вход/выход сглаживают только подъём ноги и сгиб колена.
