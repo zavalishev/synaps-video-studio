@@ -16,7 +16,7 @@ import { die, ensureDir, inJobStrict, jobDir, num, parseArgs, ROOT, str } from "
 import { cacheDir, ffprobeDuration } from "./_media";
 import { music, musicConfig, musicKey, type MusicRequest } from "./_music";
 
-type Track = { id: string; file: string; mood?: string[]; bpm?: number; energy?: number; durSec?: number; loop?: boolean; license?: string; source?: string };
+type Track = { id: string; file: string; mood?: string[]; bpm?: number; energy?: number; durSec?: number; loop?: boolean; license?: string; source?: string; trend?: boolean; genre?: string; niche?: string[] };
 const DIR = join(ROOT, "public", "music");
 const catFile = join(DIR, "catalog.json");
 const cat: Track[] = existsSync(catFile) ? JSON.parse(readFileSync(catFile, "utf8")).tracks ?? [] : [];
@@ -64,8 +64,10 @@ if (make !== undefined || planArg) {
 } else {
   const q = a._[0]?.toLowerCase();
   const bpm = range("bpm"), en = range("energy");
-  const list = cat.filter((t) => (!q || t.id.includes(q) || (t.mood ?? []).some((m) => m.toLowerCase().includes(q)))
+  const tags = (t: Track) => [...(t.mood ?? []), ...(t.niche ?? []), t.genre ?? ""];
+  // Трендовые треки (поджанры на подъёме в Reels/TikTok) — первыми: старые — только детское, сон, погода.
+  const list = [...cat].sort((x, y) => Number(Boolean(y.trend)) - Number(Boolean(x.trend))).filter((t) => (!q || t.id.includes(q) || tags(t).some((m) => m.toLowerCase().includes(q)))
     && (!bpm || (t.bpm !== undefined && t.bpm >= bpm[0] && t.bpm <= bpm[1])) && (!en || (t.energy !== undefined && t.energy >= en[0] && t.energy <= en[1])));
-  for (const t of list) console.log(`${t.id}\t${(t.mood ?? []).join(",")}\t${t.bpm ?? "?"} bpm\tэнергия ${t.energy ?? "?"}\t${t.durSec?.toFixed(0) ?? "?"} с${t.loop ? " петля" : ""}\t${t.license ?? "?"}`);
+  for (const t of list) console.log(`${t.trend ? "ТРЕНД " : ""}${t.id}\t${t.genre ? t.genre + "; " : ""}${tags(t).filter((x) => x && x !== t.genre).join(",")}\t${t.bpm ?? "?"} bpm\tэнергия ${t.energy ?? "?"}\t${t.durSec?.toFixed(0) ?? "?"} с${t.loop ? " петля" : ""}\t${t.license ?? "?"}`);
   console.error(`${list.length} из ${cat.length} треков`);
 }

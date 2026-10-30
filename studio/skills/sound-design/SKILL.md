@@ -65,13 +65,15 @@ description: Звук ролика — голос (если озвучка по�
   темп в BPM (`"92 BPM"` — по нему режутся доли), в `avoid` — то, что спорит с голосом
   (`"vocals"`, `"busy drums"` под экспертным разговором). Пример:
   ```json
-  {"styles":["warm cinematic pop","felt piano","soft strings","hopeful","92 BPM"],"avoid":["vocals"],
-   "sections":[{"name":"hook","styles":["sparse piano, tension"],"sec":4},
-               {"name":"build","styles":["pulse enters, light percussion"],"sec":14},
-               {"name":"climax","styles":["full strings, uplifting"],"sec":8},
-               {"name":"outro","styles":["resolve, sustained chord, no fade to silence"],"sec":4}]}
+  {"styles":["amapiano","112 BPM","A minor","log drum bass","jazzy electric piano chords","shakers","instrumental"],
+   "avoid":["vocals","generic corporate","stock music","cheesy ukulele","whistling","orchestral","fade-in","long intro"],
+   "sections":[{"name":"hook","styles":["full groove from 0:00, log drum and shakers, no intro"],"sec":8.6},
+               {"name":"under-voice","styles":["sparse groove, no lead melody, mids clear for voice"],"sec":12.9},
+               {"name":"drop","styles":["one beat of silence, then full drop with piano hook"],"sec":6.4},
+               {"name":"outro","styles":["groove holds to the last frame, no fade to silence"],"sec":4.3}]}
   ```
-  Коротко — `--make "warm felt piano, soft strings, hopeful, 92 BPM, build to uplifting finish" --sec 30`.
+  (секции — целые такты: 112 BPM → такт 2,14 с). Коротко — `--make "Amapiano, 112 BPM, A minor, instrumental.
+  Starts instantly on the full groove at 0:00. Log drum bass, jazzy electric piano, shakers. Sunny, warm" --sec 30`.
   **Звук не должен быть стоком.** Расплывчатое «upbeat electronic / corporate / lo-fi» генератор
   закрывает самым частым вариантом. Называй точно: конкретный поджанр + BPM + тональность +
   3–5 фирменных инструментов поджанра + продакшн/эпоха + 2–3 слова настроения; первая секция — уже
@@ -87,8 +89,10 @@ description: Звук ролика — голос (если озвучка по�
   Один трек на ролик: модель его не слышит, поэтому проверка — mixcheck и решение по цифрам,
   а не перебор генераций. Описание трека и почему он такой — в notes.md. Генерация отказала
   (бюджет, сеть) — каталог, ролик выпускается всё равно.
-- Музыка из каталога: `studio music [настроение]` — каталог лицензированных треков студии (CC0, `public/music`)
-  (настроение, темп, энергия). Склейки и акценты — на долях (доля = 60/bpm с). Каталог пуст
+- Музыка из каталога: `studio music [настроение|ниша|поджанр]` — каталог лицензированных треков студии
+  (`public/music`; настроение, темп, энергия). Треки с пометкой ТРЕНД (поджанры на подъёме в Reels/TikTok:
+  afro house, amapiano, UK garage, бразильский фонк…) — первыми: подбирай по нише, потом по настроению,
+  и трек не короче ролика. Старые CC0 без пометки — только детское, колыбельное, зимнее, дождь. Склейки и акценты — на долях (доля = 60/bpm с). Каталог пуст
   — это **открытый вопрос в notes.md** («музыки нет; владелец добавит звук площадки в
   приложении»), а не тихая норма; генерация — только когда doctor её показывает, самодельный синтез
   «мелодии» музыку не заменяет (звучит как рингтон).
